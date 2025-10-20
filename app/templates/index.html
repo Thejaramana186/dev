@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nifty 50 Stock Data Fetcher</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Nifty 50 Stock Data Fetcher</h1>
+            <p>Historical daily OHLC data from Yahoo Finance (2000 onwards)</p>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-primary" onclick="loadCompanies()">Load Companies</button>
+            <button class="btn btn-secondary" onclick="fetchAll()">Fetch All Historical Data</button>
+        </div>
+
+        <div class="content">
+            <div id="message"></div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <h3>Total Companies</h3>
+                    <p>{{ companies|length }}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Companies with Data</h3>
+                    <p>{{ companies|selectattr('count', 'gt', 0)|list|length }}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Data Points</h3>
+                    <p>{{ companies|sum(attribute='count') }}</p>
+                </div>
+            </div>
+
+            <h2 style="margin-bottom: 20px; color: #1e3c72;">Companies</h2>
+
+            <div class="companies-grid">
+                {% for item in companies %}
+                <div class="company-card">
+                    <h3>{{ item.company.name }}</h3>
+                    <div class="symbol">{{ item.company.symbol }}</div>
+                    <div class="info">
+                        <span><strong>Ticker:</strong> {{ item.company.yahoo_ticker }}</span>
+                        <span><strong>Records:</strong> {{ item.count }}</span>
+                        {% if item.latest_date %}
+                        <span><strong>Latest:</strong> {{ item.latest_date }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="actions">
+                        <a href="/company/{{ item.company.symbol }}" class="btn btn-info">View Data</a>
+                        <button class="btn btn-info" onclick="fetchCompany('{{ item.company.symbol }}')">
+                            {% if item.count > 0 %}Update{% else %}Fetch{% endif %}
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if companies|length == 0 %}
+            <div class="message info">
+                <p>No companies loaded. Click "Load Companies" to load Nifty 50 companies from tickers.csv</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        function showMessage(text, type = 'info') {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+            setTimeout(() => {
+                messageDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        async function loadCompanies() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = 'Loading...<span class="loading"></span>';
+
+            try {
+                const response = await fetch('/api/load-companies', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.error) {
+                    showMessage(data.error, 'error');
+                } else {
+                    showMessage(`Loaded ${data.loaded} companies successfully!`, 'success');
+                    setTimeout(() => location.reload(), 1500);
+                }
+            } catch (error) {
+                showMessage('Error loading companies: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Load Companies';
+            }
+        }
+
+        async function fetchAll() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = 'Fetching...<span class="loading"></span>';
+
+            try {
+                const response = await fetch('/api/fetch-all', { method: 'POST' });
+                const data = await response.json();
+
+                showMessage(data.message + ' (This may take several minutes)', 'info');
+
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = 'Fetch All Historical Data';
+                    showMessage('Refresh the page to see updated data', 'success');
+                }, 5000);
+            } catch (error) {
+                showMessage('Error fetching data: ' + error.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = 'Fetch All Historical Data';
+            }
+        }
+
+        async function fetchCompany(symbol) {
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = 'Fetching...<span class="loading"></span>';
+
+            try {
+                const response = await fetch(`/api/fetch-company/${symbol}`, { method: 'POST' });
+                const data = await response.json();
+
+                if (data.error) {
+                    showMessage(data.error, 'error');
+                } else {
+                    showMessage(`Fetched ${data.fetched} records, inserted ${data.inserted} new records for ${symbol}`, 'success');
+                    setTimeout(() => location.reload(), 1500);
+                }
+            } catch (error) {
+                showMessage('Error fetching data: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+    </script>
+</body>
+</html>
