@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from datetime import datetime
 import csv
 import os
 from pathlib import Path
@@ -152,8 +153,13 @@ async def api_fetch_company(symbol: str, db: Session = Depends(get_db)):
         }
     else:
         return JSONResponse(
-            status_code=500,
-            content={"error": "Failed to fetch data"}
+            status_code=200,
+            content={
+                "symbol": symbol,
+                "fetched": 0,
+                "inserted": 0,
+                "message": "No data available for this ticker. It may be delisted or have a different symbol."
+            }
         )
 
 
@@ -179,8 +185,13 @@ async def api_update_company(symbol: str, db: Session = Depends(get_db)):
         }
     else:
         return JSONResponse(
-            status_code=500,
-            content={"error": "Failed to fetch data"}
+            status_code=200,
+            content={
+                "symbol": symbol,
+                "fetched": 0,
+                "inserted": 0,
+                "message": "No data available for this ticker. It may be delisted or have a different symbol."
+            }
         )
 
 
@@ -233,6 +244,65 @@ async def api_get_company_data(symbol: str, limit: int = 100, db: Session = Depe
             for d in data
         ]
     }
+
+
+@app.get("/custom-fetch", response_class=HTMLResponse)
+async def custom_fetch_page(request: Request):
+    """Page for fetching custom stock data"""
+    return templates.TemplateResponse(
+        "custom_fetch.html",
+        {"request": request}
+    )
+
+
+@app.post("/api/fetch-custom")
+async def api_fetch_custom(request: Request):
+    """Fetch historical data for any NSE symbol with custom dates"""
+    try:
+        form_data = await request.form()
+        symbol = form_data.get("symbol", "").strip().upper()
+        start_date = form_data.get("start_date", "2000-01-01")
+        end_date = form_data.get("end_date", datetime.now().strftime("%Y-%m-%d"))
+
+        if not symbol:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Symbol is required"}
+            )
+
+        # Add .NS suffix if not present
+        yahoo_ticker = symbol if symbol.endswith(".NS") else f"{symbol}.NS"
+
+        # Fetch data
+        data = fetcher.fetch_historical_data(
+            yahoo_ticker,
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        if data:
+            return {
+                "success": True,
+                "symbol": symbol,
+                "yahoo_ticker": yahoo_ticker,
+                "start_date": start_date,
+                "end_date": end_date,
+                "records": len(data),
+                "data": data
+            }
+        else:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "message": f"No data found for {symbol}. The symbol may be incorrect or delisted."
+                }
+            )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
 
 
 if __name__ == "__main__":

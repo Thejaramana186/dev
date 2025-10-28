@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Stock Data Fetcher</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/" class="back-link">← Back to Home</a>
+            <h1>Custom Stock Data Fetcher</h1>
+            <p>Fetch historical OHLC data for any NSE stock with custom date range</p>
+        </div>
+
+        <div class="content">
+            <div id="message"></div>
+
+            <div class="custom-fetch-form">
+                <h2>Enter Stock Details</h2>
+                <form id="fetchForm" onsubmit="fetchCustomData(event)">
+                    <div class="form-group">
+                        <label for="symbol">NSE Symbol *</label>
+                        <input
+                            type="text"
+                            id="symbol"
+                            name="symbol"
+                            placeholder="e.g., RELIANCE, TCS, INFY"
+                            required
+                            autocomplete="off"
+                        >
+                        <small>Enter the NSE stock symbol (without .NS suffix)</small>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="start_date">Start Date *</label>
+                            <input
+                                type="date"
+                                id="start_date"
+                                name="start_date"
+                                value="2020-01-01"
+                                required
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label for="end_date">End Date *</label>
+                            <input
+                                type="date"
+                                id="end_date"
+                                name="end_date"
+                                required
+                            >
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-large" id="submitBtn">
+                        Fetch Historical Data
+                    </button>
+                </form>
+            </div>
+
+            <div id="results" class="results-section" style="display: none;">
+                <h2>Results</h2>
+                <div id="results-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Set end date to today by default
+        document.getElementById('end_date').valueAsDate = new Date();
+
+        function showMessage(text, type = 'info') {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+            setTimeout(() => {
+                messageDiv.innerHTML = '';
+            }, 10000);
+        }
+
+        async function fetchCustomData(event) {
+            event.preventDefault();
+
+            const submitBtn = document.getElementById('submitBtn');
+            const resultsDiv = document.getElementById('results');
+            const resultsContent = document.getElementById('results-content');
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = 'Fetching...<span class="loading"></span>';
+            resultsDiv.style.display = 'none';
+
+            try {
+                const formData = new FormData(event.target);
+
+                const response = await fetch('/api/fetch-custom', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(`Successfully fetched ${data.records} records for ${data.symbol}`, 'success');
+
+                    // Display results
+                    resultsDiv.style.display = 'block';
+                    resultsContent.innerHTML = `
+                        <div class="result-summary">
+                            <h3>${data.symbol} (${data.yahoo_ticker})</h3>
+                            <p><strong>Date Range:</strong> ${data.start_date} to ${data.end_date}</p>
+                            <p><strong>Total Records:</strong> ${data.records}</p>
+                        </div>
+
+                        <div class="table-actions">
+                            <button class="btn btn-info" onclick="downloadCSV()">Download as CSV</button>
+                            <button class="btn btn-info" onclick="downloadJSON()">Download as JSON</button>
+                        </div>
+
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Open</th>
+                                    <th>High</th>
+                                    <th>Low</th>
+                                    <th>Close</th>
+                                    <th>Volume</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.data.slice(0, 100).map(row => `
+                                    <tr>
+                                        <td>${row.date}</td>
+                                        <td>${row.open.toFixed(2)}</td>
+                                        <td>${row.high.toFixed(2)}</td>
+                                        <td>${row.low.toFixed(2)}</td>
+                                        <td>${row.close.toFixed(2)}</td>
+                                        <td>${row.volume.toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                        ${data.records > 100 ? `<p class="note">Showing first 100 of ${data.records} records</p>` : ''}
+                    `;
+
+                    // Store data for download
+                    window.fetchedData = data;
+                } else {
+                    showMessage(data.message || 'Failed to fetch data', 'error');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Fetch Historical Data';
+            }
+        }
+
+        function downloadCSV() {
+            const data = window.fetchedData;
+            if (!data) return;
+
+            let csv = 'Date,Open,High,Low,Close,Volume\n';
+            data.data.forEach(row => {
+                csv += `${row.date},${row.open},${row.high},${row.low},${row.close},${row.volume}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${data.symbol}_${data.start_date}_${data.end_date}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        function downloadJSON() {
+            const data = window.fetchedData;
+            if (!data) return;
+
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${data.symbol}_${data.start_date}_${data.end_date}.json`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
