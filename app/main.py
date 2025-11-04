@@ -109,7 +109,12 @@ async def api_fetch_all(background_tasks: BackgroundTasks, db: Session = Depends
     def fetch_task():
         db_task = next(get_db())
         try:
-            for company in companies:
+            import time
+            for i, company in enumerate(companies):
+                # Small delay to avoid overwhelming API
+                if i > 0:
+                    time.sleep(0.5)
+
                 data = fetcher.fetch_historical_data(
                     company.yahoo_ticker,
                     start_date="2000-01-01"
