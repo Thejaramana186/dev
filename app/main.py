@@ -12,7 +12,7 @@ import time
 from app.db import engine, get_db, Base
 from app.models import Company, DailyOHLC
 from app import crud, fetcher
-
+from prometheus_fastapi_instrumentator import Instrumentator
 
 # ============================================================
 # ===============   INITIAL SETUP   ==========================
@@ -21,7 +21,7 @@ from app import crud, fetcher
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Nifty 50 Stock Data Fetcher")
-
+instrumentator = Instrumentator().instrument(app).expose(app)
 BASE_DIR = Path(__file__).resolve().parent
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
