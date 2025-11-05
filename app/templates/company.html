@@ -3,55 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ company.name }} - Stock Data</title>
+    <title>{{ company.name }} - Stock Data (Delta Mode)</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <a href="/" class="back-link">← Back to Companies</a>
-            <h1>{{ company.name }}</h1>
-            <p>{{ company.symbol }} ({{ company.yahoo_ticker }}) - Total Records: {{ total_records }}</p>
+            <a href="/" class="back-link">← Back to Dashboard</a>
+            <h1>{{ company.name }} (Delta Mode)</h1>
+            <p>{{ company.symbol }} • {{ company.yahoo_ticker }}</p>
+            <p>Total Records: <strong>{{ total_records }}</strong></p>
         </div>
 
         <div class="actions">
-            <button class="btn btn-secondary" onclick="updateData()">Update with Latest Data</button>
+            <button class="btn btn-info" onclick="updateData()">Update Latest (Delta)</button>
             <button class="btn btn-primary" onclick="fetchFull()">Fetch Full History</button>
         </div>
 
-        <div class="content">
-            <div id="message"></div>
+        <div id="message"></div>
 
+        <div class="content">
             <h2 style="margin-bottom: 20px; color: #1e3c72;">Recent Historical Data (Last 100 Records)</h2>
 
             {% if data %}
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Open</th>
-                        <th>High</th>
-                        <th>Low</th>
-                        <th>Close</th>
-                        <th>Volume</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for record in data %}
-                    <tr>
-                        <td>{{ record.date }}</td>
-                        <td>{{ "%.2f"|format(record.open) }}</td>
-                        <td>{{ "%.2f"|format(record.high) }}</td>
-                        <td>{{ "%.2f"|format(record.low) }}</td>
-                        <td>{{ "%.2f"|format(record.close) }}</td>
-                        <td>{{ "{:,.0f}".format(record.volume) }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Open</th>
+                            <th>High</th>
+                            <th>Low</th>
+                            <th>Close</th>
+                            <th>Volume</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in data %}
+                        <tr>
+                            <td>{{ record.date }}</td>
+                            <td>{{ "%.2f"|format(record.open) }}</td>
+                            <td>{{ "%.2f"|format(record.high) }}</td>
+                            <td>{{ "%.2f"|format(record.low) }}</td>
+                            <td>{{ "%.2f"|format(record.close) }}</td>
+                            <td>{{ "{:,.0f}".format(record.volume) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
             {% else %}
             <div class="message info">
-                <p>No data available for this company. Click "Fetch Full History" to download historical data.</p>
+                <p>No data available for this company. Click “Fetch Full History” to download all records.</p>
             </div>
             {% endif %}
         </div>
@@ -68,6 +71,7 @@
 
         async function updateData() {
             const btn = event.target;
+            const original = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = 'Updating...<span class="loading"></span>';
 
@@ -78,19 +82,20 @@
                 if (data.error) {
                     showMessage(data.error, 'error');
                 } else {
-                    showMessage(`Fetched ${data.fetched} records, inserted ${data.inserted} new records`, 'success');
+                    showMessage(`Fetched ${data.fetched} records, inserted ${data.inserted} new.`, 'success');
                     setTimeout(() => location.reload(), 1500);
                 }
-            } catch (error) {
-                showMessage('Error updating data: ' + error.message, 'error');
+            } catch (err) {
+                showMessage('Error updating data: ' + err.message, 'error');
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = 'Update with Latest Data';
+                btn.innerHTML = original;
             }
         }
 
         async function fetchFull() {
             const btn = event.target;
+            const original = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = 'Fetching...<span class="loading"></span>';
 
@@ -101,14 +106,14 @@
                 if (data.error) {
                     showMessage(data.error, 'error');
                 } else {
-                    showMessage(`Fetched ${data.fetched} records, inserted ${data.inserted} new records`, 'success');
+                    showMessage(`Fetched ${data.fetched} total, inserted ${data.inserted} new records.`, 'success');
                     setTimeout(() => location.reload(), 1500);
                 }
-            } catch (error) {
-                showMessage('Error fetching data: ' + error.message, 'error');
+            } catch (err) {
+                showMessage('Error fetching data: ' + err.message, 'error');
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = 'Fetch Full History';
+                btn.innerHTML = original;
             }
         }
     </script>

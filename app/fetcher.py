@@ -4,7 +4,9 @@ from typing import List, Dict, Optional
 import logging
 import time
 import random
+from . import crud  # make sure crud.py is in same package
 
+# === Logging Setup ===
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -12,6 +14,7 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 }
 
+# === Reference Ranges for Mock Data ===
 NSE_STOCK_RANGES = {
     'RELIANCE.NS': {'min': 1500, 'max': 3500},
     'TCS.NS': {'min': 3000, 'max': 4500},
@@ -65,7 +68,7 @@ NSE_STOCK_RANGES = {
     'WIPRO.NS': {'min': 500, 'max': 800},
 }
 
-
+# === MOCK DATA GENERATOR ===
 def generate_mock_data(ticker: str, start_date: str, end_date: str) -> List[Dict]:
     """Generate realistic mock OHLC data for testing"""
     try:
@@ -87,7 +90,7 @@ def generate_mock_data(ticker: str, start_date: str, end_date: str) -> List[Dict
             open_price = base_price
             high = close * (1 + random.uniform(0, 1) / 100)
             low = close * (1 - random.uniform(0, 1) / 100)
-            volume = random.randint(1000000, 50000000)
+            volume = random.randint(1_000_000, 50_000_000)
 
             data.append({
                 'date': current,
@@ -106,19 +109,11 @@ def generate_mock_data(ticker: str, start_date: str, end_date: str) -> List[Dict
     return data
 
 
+# === HISTORICAL DATA FETCH ===
 def fetch_historical_data(yahoo_ticker: str, start_date: str = "2000-01-01",
                          end_date: Optional[str] = None, max_retries: int = 2) -> List[Dict]:
     """
     Fetch historical OHLC data from Yahoo Finance with fallback to mock data
-
-    Args:
-        yahoo_ticker: Yahoo Finance ticker symbol (e.g., 'RELIANCE.NS')
-        start_date: Start date in 'YYYY-MM-DD' format
-        end_date: End date in 'YYYY-MM-DD' format (default: today)
-        max_retries: Maximum number of retry attempts
-
-    Returns:
-        List of dictionaries with date, open, high, low, close, volume
     """
     if end_date is None:
         end_date = datetime.now().strftime("%Y-%m-%d")
@@ -156,17 +151,9 @@ def fetch_historical_data(yahoo_ticker: str, start_date: str = "2000-01-01",
     return generate_mock_data(yahoo_ticker, start_date, end_date)
 
 
+# === LATEST DATA FETCH ===
 def fetch_latest_data(yahoo_ticker: str, days: int = 7) -> List[Dict]:
-    """
-    Fetch latest N days of data with fallback to mock data
-
-    Args:
-        yahoo_ticker: Yahoo Finance ticker symbol
-        days: Number of days to fetch (default: 7)
-
-    Returns:
-        List of dictionaries with OHLC data
-    """
+    """Fetch latest N days of data with fallback to mock data"""
     try:
         ticker = yf.Ticker(yahoo_ticker, headers=HEADERS)
         df = ticker.history(period=f"{days}d", auto_adjust=False, timeout=10)
@@ -193,3 +180,35 @@ def fetch_latest_data(yahoo_ticker: str, days: int = 7) -> List[Dict]:
     end_date = datetime.now().strftime("%Y-%m-%d")
     start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     return generate_mock_data(yahoo_ticker, start_date, end_date)
+
+
+# === DELTA FETCH IMPLEMENTATION ===
+def fetch_delta_data(yahoo_ticker: str, db_session):
+    """
+    Fetch only NEW (delta) data since the last date in the DB.
+    Automatically appends new rows into the database.
+    """
+    last_date = crud.get_last_date_from_db(yahoo_ticker, db_session)
+    if last_date:
+        start_date = (last_date + timedelta(days=1)).strftime("%Y-%m-%d")
+    else:
+        start_date = "2000-01-01"
+
+    end_date = datetime.now().strftime("%Y-%m-%d")
+
+    if datetime.strptime(start_date, "%Y-%m-%d").date() > datetime.strptime(end_date, "%Y-%m-%d").date():
+        logger.info(f"No new data to fetch for {yahoo_ticker}")
+        return []
+
+    logger.info(f"Performing delta fetch for {yahoo_ticker}: {start_date} → {end_date}")
+
+    new_data = fetch_historical_data(yahoo_ticker, start_date=start_date, end_date=end_date)
+
+    if not new_data:
+        logger.info(f"No new records found for {yahoo_ticker}")
+        return []
+
+    crud.save_stock_data(yahoo_ticker, new_data, db_session)
+    logger.info(f"✅ Delta update complete for {yahoo_ticker}: {len(new_data)} new records added")
+
+    return new_data

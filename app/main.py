@@ -3,239 +3,128 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 import csv
 import os
 from pathlib import Path
+import time
 
 from app.db import engine, get_db, Base
 from app.models import Company, DailyOHLC
 from app import crud, fetcher
 
-# Create tables
+
+# ============================================================
+# ===============   INITIAL SETUP   ==========================
+# ============================================================
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Nifty 50 Stock Data Fetcher")
 
-# Setup static files and templates
 BASE_DIR = Path(__file__).resolve().parent
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
-def load_companies_from_csv(db: Session):
-    """Load companies from tickers.csv into database"""
-    csv_path = BASE_DIR.parent / "tickers.csv"
+# ============================================================
+# ===============   UTILITY FUNCTIONS   ======================
+# ============================================================
 
+def load_companies_from_csv(db: Session):
+    """Load company list from tickers.csv into DB."""
+    csv_path = BASE_DIR.parent / "tickers.csv"
     if not csv_path.exists():
         return {"error": "tickers.csv not found"}
 
     loaded = 0
-    with open(csv_path, 'r') as f:
+    with open(csv_path, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
             crud.get_or_create_company(
                 db,
-                symbol=row['symbol'],
-                name=row['name'],
-                yahoo_ticker=row['yahoo_ticker']
+                symbol=row["symbol"],
+                name=row["name"],
+                yahoo_ticker=row["yahoo_ticker"],
             )
             loaded += 1
-
     return {"loaded": loaded}
 
 
+# ============================================================
+# ===============   ROUTES: PAGES   ==========================
+# ============================================================
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, db: Session = Depends(get_db)):
-    """Home page showing all companies"""
+    """Home page showing company stats."""
     companies = crud.get_all_companies(db)
-
-    # Get data counts for each company
-    company_stats = []
-    for company in companies:
-        count = crud.get_data_count(db, company.id)
-        latest = crud.get_latest_date(db, company.id)
-        company_stats.append({
-            "company": company,
-            "count": count,
-            "latest_date": latest
-        })
-
-    return templates.TemplateResponse(
-        "index.html",
-        {"request": request, "companies": company_stats}
-    )
+    company_stats = [
+        {
+            "company": c,
+            "count": crud.get_data_count(db, c.id),
+            "latest_date": crud.get_latest_date(db, c.id),
+        }
+        for c in companies
+    ]
+    return templates.TemplateResponse("index.html", {"request": request, "companies": company_stats})
 
 
 @app.get("/company/{symbol}", response_class=HTMLResponse)
 async def company_detail(symbol: str, request: Request, db: Session = Depends(get_db)):
-    """Company detail page showing historical data"""
+    """Show detailed OHLC data for a company."""
     company = crud.get_company_by_symbol(db, symbol)
-
     if not company:
         return HTMLResponse(content="Company not found", status_code=404)
-
-    # Get recent data (last 100 records)
     data = crud.get_company_data(db, company.id)[:100]
-
     return templates.TemplateResponse(
         "company.html",
-        {
-            "request": request,
-            "company": company,
-            "data": data,
-            "total_records": crud.get_data_count(db, company.id)
-        }
+        {"request": request, "company": company, "data": data, "total_records": crud.get_data_count(db, company.id)},
     )
 
+
+@app.get("/custom-fetch", response_class=HTMLResponse)
+async def custom_fetch_page(request: Request):
+    """HTML form for custom stock fetching."""
+    return templates.TemplateResponse("custom_fetch.html", {"request": request})
+
+
+# ============================================================
+# ===============   ROUTES: API - COMPANY MGMT   =============
+# ============================================================
 
 @app.post("/api/load-companies")
 async def api_load_companies(db: Session = Depends(get_db)):
-    """Load companies from tickers.csv"""
-    result = load_companies_from_csv(db)
-    return result
-
-
-@app.post("/api/fetch-all")
-async def api_fetch_all(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """Fetch historical data for all companies"""
-    companies = crud.get_all_companies(db)
-
-    if not companies:
-        # Load companies first
-        load_companies_from_csv(db)
-        companies = crud.get_all_companies(db)
-
-    def fetch_task():
-        db_task = next(get_db())
-        try:
-            import time
-            for i, company in enumerate(companies):
-                # Small delay to avoid overwhelming API
-                if i > 0:
-                    time.sleep(0.5)
-
-                data = fetcher.fetch_historical_data(
-                    company.yahoo_ticker,
-                    start_date="2000-01-01"
-                )
-                if data:
-                    inserted = crud.bulk_insert_ohlc(db_task, company.id, data)
-                    print(f"Inserted {inserted} records for {company.symbol}")
-        finally:
-            db_task.close()
-
-    background_tasks.add_task(fetch_task)
-
-    return {
-        "message": f"Started fetching data for {len(companies)} companies",
-        "companies": len(companies)
-    }
-
-
-@app.post("/api/fetch-company/{symbol}")
-async def api_fetch_company(symbol: str, db: Session = Depends(get_db)):
-    """Fetch historical data for a specific company"""
-    company = crud.get_company_by_symbol(db, symbol)
-
-    if not company:
-        return JSONResponse(
-            status_code=404,
-            content={"error": "Company not found"}
-        )
-
-    data = fetcher.fetch_historical_data(
-        company.yahoo_ticker,
-        start_date="2000-01-01"
-    )
-
-    if data:
-        inserted = crud.bulk_insert_ohlc(db, company.id, data)
-        return {
-            "symbol": symbol,
-            "fetched": len(data),
-            "inserted": inserted
-        }
-    else:
-        return JSONResponse(
-            status_code=200,
-            content={
-                "symbol": symbol,
-                "fetched": 0,
-                "inserted": 0,
-                "message": "No data available for this ticker. It may be delisted or have a different symbol."
-            }
-        )
-
-
-@app.post("/api/update-company/{symbol}")
-async def api_update_company(symbol: str, db: Session = Depends(get_db)):
-    """Update company with latest data"""
-    company = crud.get_company_by_symbol(db, symbol)
-
-    if not company:
-        return JSONResponse(
-            status_code=404,
-            content={"error": "Company not found"}
-        )
-
-    data = fetcher.fetch_latest_data(company.yahoo_ticker, days=7)
-
-    if data:
-        inserted = crud.bulk_insert_ohlc(db, company.id, data)
-        return {
-            "symbol": symbol,
-            "fetched": len(data),
-            "inserted": inserted
-        }
-    else:
-        return JSONResponse(
-            status_code=200,
-            content={
-                "symbol": symbol,
-                "fetched": 0,
-                "inserted": 0,
-                "message": "No data available for this ticker. It may be delisted or have a different symbol."
-            }
-        )
+    """Load tickers from CSV."""
+    return load_companies_from_csv(db)
 
 
 @app.get("/api/companies")
 async def api_get_companies(db: Session = Depends(get_db)):
-    """Get all companies with stats"""
+    """Return list of companies with basic stats."""
     companies = crud.get_all_companies(db)
-
     result = []
-    for company in companies:
-        count = crud.get_data_count(db, company.id)
-        latest = crud.get_latest_date(db, company.id)
+    for c in companies:
         result.append({
-            "id": company.id,
-            "symbol": company.symbol,
-            "name": company.name,
-            "yahoo_ticker": company.yahoo_ticker,
-            "data_count": count,
-            "latest_date": str(latest) if latest else None
+            "id": c.id,
+            "symbol": c.symbol,
+            "name": c.name,
+            "yahoo_ticker": c.yahoo_ticker,
+            "data_count": crud.get_data_count(db, c.id),
+            "latest_date": str(crud.get_latest_date(db, c.id)) if crud.get_latest_date(db, c.id) else None
         })
-
     return result
 
 
 @app.get("/api/company/{symbol}/data")
 async def api_get_company_data(symbol: str, limit: int = 100, db: Session = Depends(get_db)):
-    """Get OHLC data for a company"""
+    """Return OHLC data for a specific symbol."""
     company = crud.get_company_by_symbol(db, symbol)
-
     if not company:
-        return JSONResponse(
-            status_code=404,
-            content={"error": "Company not found"}
-        )
-
+        return JSONResponse(status_code=404, content={"error": "Company not found"})
     data = crud.get_company_data(db, company.id)[:limit]
-
     return {
-        "symbol": symbol,
+        "symbol": company.symbol,
         "name": company.name,
         "data": [
             {
@@ -244,71 +133,105 @@ async def api_get_company_data(symbol: str, limit: int = 100, db: Session = Depe
                 "high": d.high,
                 "low": d.low,
                 "close": d.close,
-                "volume": d.volume
+                "volume": d.volume,
             }
             for d in data
-        ]
+        ],
     }
 
 
-@app.get("/custom-fetch", response_class=HTMLResponse)
-async def custom_fetch_page(request: Request):
-    """Page for fetching custom stock data"""
-    return templates.TemplateResponse(
-        "custom_fetch.html",
-        {"request": request}
-    )
+# ============================================================
+# ===============   ROUTES: API - FETCH LOGIC   ==============
+# ============================================================
+
+@app.post("/api/fetch-all")
+async def api_fetch_all(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """Fetch historical or delta data for all companies."""
+    companies = crud.get_all_companies(db)
+    if not companies:
+        load_companies_from_csv(db)
+        companies = crud.get_all_companies(db)
+
+    def fetch_task():
+        db_task = next(get_db())
+        try:
+            for i, company in enumerate(companies):
+                if i > 0:
+                    time.sleep(0.5)
+
+                last_date = crud.get_latest_date(db_task, company.id)
+                if last_date:
+                    print(f"Δ Delta fetch for {company.symbol} since {last_date}")
+                    new_data = fetcher.fetch_historical_data(
+                        company.yahoo_ticker,
+                        start_date=(last_date + timedelta(days=1)).strftime("%Y-%m-%d"),
+                    )
+                else:
+                    print(f"Initial full fetch for {company.symbol}")
+                    new_data = fetcher.fetch_historical_data(company.yahoo_ticker, start_date="2000-01-01")
+
+                if new_data:
+                    inserted = crud.bulk_insert_ohlc(db_task, company.id, new_data)
+                    print(f"Inserted {inserted} records for {company.symbol}")
+        finally:
+            db_task.close()
+
+    background_tasks.add_task(fetch_task)
+    return {"message": f"Started background fetch for {len(companies)} companies."}
+
+
+@app.post("/api/fetch-company/{symbol}")
+async def api_fetch_company(symbol: str, db: Session = Depends(get_db)):
+    """Fetch full or delta data for a specific company."""
+    company = crud.get_company_by_symbol(db, symbol)
+    if not company:
+        return JSONResponse(status_code=404, content={"error": "Company not found"})
+
+    last_date = crud.get_latest_date(db, company.id)
+    start_date = (last_date + timedelta(days=1)).strftime("%Y-%m-%d") if last_date else "2000-01-01"
+    new_data = fetcher.fetch_historical_data(company.yahoo_ticker, start_date=start_date)
+
+    if not new_data:
+        return JSONResponse(status_code=200, content={"message": "No new data found."})
+
+    inserted = crud.bulk_insert_ohlc(db, company.id, new_data)
+    return {"symbol": symbol, "fetched": len(new_data), "inserted": inserted}
 
 
 @app.post("/api/fetch-custom")
 async def api_fetch_custom(request: Request):
-    """Fetch historical data for any NSE symbol with custom dates"""
-    try:
-        form_data = await request.form()
-        symbol = form_data.get("symbol", "").strip().upper()
-        start_date = form_data.get("start_date", "2000-01-01")
-        end_date = form_data.get("end_date", datetime.now().strftime("%Y-%m-%d"))
+    """Custom fetch endpoint with arbitrary symbol and date range."""
+    form_data = await request.form()
+    symbol = form_data.get("symbol", "").strip().upper()
+    start_date = form_data.get("start_date", "2000-01-01")
+    end_date = form_data.get("end_date", datetime.now().strftime("%Y-%m-%d"))
 
-        if not symbol:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "Symbol is required"}
-            )
+    if not symbol:
+        return JSONResponse(status_code=400, content={"error": "Symbol is required"})
 
-        # Add .NS suffix if not present
-        yahoo_ticker = symbol if symbol.endswith(".NS") else f"{symbol}.NS"
+    yahoo_ticker = symbol if symbol.endswith(".NS") else f"{symbol}.NS"
+    data = fetcher.fetch_historical_data(yahoo_ticker, start_date=start_date, end_date=end_date)
 
-        # Fetch data
-        data = fetcher.fetch_historical_data(
-            yahoo_ticker,
-            start_date=start_date,
-            end_date=end_date
-        )
-
-        if data:
-            return {
-                "success": True,
-                "symbol": symbol,
-                "yahoo_ticker": yahoo_ticker,
-                "start_date": start_date,
-                "end_date": end_date,
-                "records": len(data),
-                "data": data
-            }
-        else:
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": False,
-                    "message": f"No data found for {symbol}. The symbol may be incorrect or delisted."
-                }
-            )
-    except Exception as e:
+    if data:
+        return {
+            "success": True,
+            "symbol": symbol,
+            "yahoo_ticker": yahoo_ticker,
+            "start_date": start_date,
+            "end_date": end_date,
+            "records": len(data),
+            "data": data,
+        }
+    else:
         return JSONResponse(
-            status_code=500,
-            content={"error": str(e)}
+            status_code=200,
+            content={"success": False, "message": f"No data found for {symbol}."},
         )
 
+
+# ============================================================
+# ===============   ENTRY POINT   ============================
+# ============================================================
 
 if __name__ == "__main__":
     import uvicorn
