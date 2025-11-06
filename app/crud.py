@@ -5,9 +5,7 @@ from datetime import date
 from typing import List, Optional
 
 
-# ============================================================
-# ===============   COMPANY MANAGEMENT   =====================
-# ============================================================
+
 
 def get_or_create_company(db: Session, symbol: str, name: str, yahoo_ticker: str) -> Company:
     """Get existing company or create a new one."""
@@ -30,9 +28,7 @@ def get_company_by_symbol(db: Session, symbol: str) -> Optional[Company]:
     return db.query(Company).filter(Company.symbol == symbol).first()
 
 
-# ============================================================
-# ===============   OHLC DATA MANAGEMENT   ===================
-# ============================================================
+
 
 def get_latest_date(db: Session, company_id: int) -> Optional[date]:
     """Return the most recent date of stored OHLC data for a company."""
@@ -53,7 +49,7 @@ def bulk_insert_ohlc(db: Session, company_id: int, ohlc_data: List[dict]) -> int
     if not ohlc_data:
         return 0
 
-    # Collect existing dates
+    
     existing_dates = {
         row[0]
         for row in db.query(DailyOHLC.date)
@@ -106,9 +102,6 @@ def get_data_count(db: Session, company_id: int) -> int:
     return db.query(DailyOHLC).filter(DailyOHLC.company_id == company_id).count()
 
 
-# ============================================================
-# ===============   DELTA FETCH HELPERS   ====================
-# ============================================================
 
 def get_last_date_from_db(db: Session, company_id: int) -> Optional[date]:
     """Alias for delta fetch logic — returns the last available date."""

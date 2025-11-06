@@ -4,9 +4,8 @@ from typing import List, Dict, Optional
 import logging
 import time
 import random
-from . import crud  # make sure crud.py is in same package
+from . import crud  
 
-# === Logging Setup ===
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -14,7 +13,7 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 }
 
-# === Reference Ranges for Mock Data ===
+
 NSE_STOCK_RANGES = {
     'RELIANCE.NS': {'min': 1500, 'max': 3500},
     'TCS.NS': {'min': 3000, 'max': 4500},
@@ -68,7 +67,7 @@ NSE_STOCK_RANGES = {
     'WIPRO.NS': {'min': 500, 'max': 800},
 }
 
-# === MOCK DATA GENERATOR ===
+
 def generate_mock_data(ticker: str, start_date: str, end_date: str) -> List[Dict]:
     """Generate realistic mock OHLC data for testing"""
     try:
@@ -109,7 +108,7 @@ def generate_mock_data(ticker: str, start_date: str, end_date: str) -> List[Dict
     return data
 
 
-# === HISTORICAL DATA FETCH ===
+
 def fetch_historical_data(yahoo_ticker: str, start_date: str = "2000-01-01",
                          end_date: Optional[str] = None, max_retries: int = 2) -> List[Dict]:
     """
@@ -151,7 +150,7 @@ def fetch_historical_data(yahoo_ticker: str, start_date: str = "2000-01-01",
     return generate_mock_data(yahoo_ticker, start_date, end_date)
 
 
-# === LATEST DATA FETCH ===
+
 def fetch_latest_data(yahoo_ticker: str, days: int = 7) -> List[Dict]:
     """Fetch latest N days of data with fallback to mock data"""
     try:
@@ -182,7 +181,7 @@ def fetch_latest_data(yahoo_ticker: str, days: int = 7) -> List[Dict]:
     return generate_mock_data(yahoo_ticker, start_date, end_date)
 
 
-# === DELTA FETCH IMPLEMENTATION ===
+
 def fetch_delta_data(yahoo_ticker: str, db_session):
     """
     Fetch only NEW (delta) data since the last date in the DB.

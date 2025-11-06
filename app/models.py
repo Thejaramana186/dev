@@ -11,7 +11,7 @@ class Company(Base):
     name = Column(String, nullable=False)
     yahoo_ticker = Column(String, unique=True, nullable=False)
 
-    # Relationship to daily data
+    
     daily_data = relationship("DailyOHLC", back_populates="company", cascade="all, delete-orphan")
 
 
@@ -27,8 +27,8 @@ class DailyOHLC(Base):
     close = Column(Float, nullable=False)
     volume = Column(Float, nullable=False)
 
-    # Relationship to company
+    
     company = relationship("Company", back_populates="daily_data")
 
-    # Unique constraint: one entry per company per date
+    
     __table_args__ = (UniqueConstraint('company_id', 'date', name='_company_date_uc'),)

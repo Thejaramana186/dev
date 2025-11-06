@@ -14,9 +14,7 @@ from app.models import Company, DailyOHLC
 from app import crud, fetcher
 from prometheus_fastapi_instrumentator import Instrumentator
 
-# ============================================================
-# ===============   INITIAL SETUP   ==========================
-# ============================================================
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -27,9 +25,7 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
-# ============================================================
-# ===============   UTILITY FUNCTIONS   ======================
-# ============================================================
+
 
 def load_companies_from_csv(db: Session):
     """Load company list from tickers.csv into DB."""
@@ -51,9 +47,7 @@ def load_companies_from_csv(db: Session):
     return {"loaded": loaded}
 
 
-# ============================================================
-# ===============   ROUTES: PAGES   ==========================
-# ============================================================
+
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, db: Session = Depends(get_db)):
@@ -89,9 +83,7 @@ async def custom_fetch_page(request: Request):
     return templates.TemplateResponse("custom_fetch.html", {"request": request})
 
 
-# ============================================================
-# ===============   ROUTES: API - COMPANY MGMT   =============
-# ============================================================
+
 
 @app.post("/api/load-companies")
 async def api_load_companies(db: Session = Depends(get_db)):
@@ -140,10 +132,7 @@ async def api_get_company_data(symbol: str, limit: int = 100, db: Session = Depe
     }
 
 
-# ============================================================
-# ===============   ROUTES: API - FETCH LOGIC   ==============
-# ============================================================
-
+ 
 @app.post("/api/fetch-all")
 async def api_fetch_all(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Fetch historical or delta data for all companies."""
@@ -229,9 +218,7 @@ async def api_fetch_custom(request: Request):
         )
 
 
-# ============================================================
-# ===============   ENTRY POINT   ============================
-# ============================================================
+
 
 if __name__ == "__main__":
     import uvicorn

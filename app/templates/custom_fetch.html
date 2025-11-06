@@ -70,7 +70,7 @@
     </div>
 
     <script>
-        // Set end date to today by default
+        
         document.getElementById('end_date').valueAsDate = new Date();
 
         function showMessage(text, type = 'info') {
@@ -105,7 +105,7 @@
                 if (data.success) {
                     showMessage(`Successfully fetched ${data.records} records for ${data.symbol}`, 'success');
 
-                    // Display results
+                    
                     resultsDiv.style.display = 'block';
                     resultsContent.innerHTML = `
                         <div class="result-summary">
@@ -146,7 +146,7 @@
                         ${data.records > 100 ? `<p class="note">Showing first 100 of ${data.records} records</p>` : ''}
                     `;
 
-                    // Store data for download
+                    
                     window.fetchedData = data;
                 } else {
                     showMessage(data.message || 'Failed to fetch data', 'error');
