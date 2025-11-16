@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: agent
+spec:
+  serviceAccountName: jenkins
+  containers:
+
+    - name: jnlp
+      image: jenkins/inbound-agent:latest
+      args:
+        - "$(JENKINS_SECRET)"
+        - "$(JENKINS_NAME)"
+
+    - name: docker
+      image: docker:24.0
+      tty: true
+      volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+
+    - name: tools
+      image: bitnami/kubectl:1.29
+      command:
+        - cat
+      tty: true
+      volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+
+  volumes:
+    - name: docker-sock
+      hostPath:
+        path: /var/run/docker.sock

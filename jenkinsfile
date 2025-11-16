@@ -1,0 +1,63 @@
+pipeline {
+  agent {
+    kubernetes {
+      label 'flask-agent'
+      defaultContainer 'tools'
+    }
+  }
+
+  environment {
+    AWS_REGION = "us-east-1"
+    ECR_REPO = "123456789012.dkr.ecr.us-east-1.amazonaws.com/stock-app"
+    IMAGE_TAG = "v${BUILD_NUMBER}"
+  }
+
+  stages {
+
+    stage('Checkout Code') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Docker Build') {
+      steps {
+        container('docker') {
+          sh '''
+            echo "Logging into ECR..."
+            aws ecr get-login-password --region $AWS_REGION \
+              | docker login --username AWS --password-stdin ${ECR_REPO%/*}
+
+            echo "Building Docker image..."
+            docker build -t $ECR_REPO:$IMAGE_TAG .
+          '''
+        }
+      }
+    }
+
+    stage('Docker Push') {
+      steps {
+        container('docker') {
+          sh '''
+            echo "Pushing image to ECR..."
+            docker push $ECR_REPO:$IMAGE_TAG
+          '''
+        }
+      }
+    }
+
+    stage('Deploy to Kubernetes') {
+      steps {
+        container('tools') {
+          sh '''
+            echo "Updating image in flask-prod.yaml..."
+            sed -i "s|IMAGE_PLACEHOLDER|$ECR_REPO:$IMAGE_TAG|g" flask-prod.yaml
+
+            echo "Applying manifest..."
+            kubectl apply -f flask-prod.yaml
+          '''
+        }
+      }
+    }
+  }
+}
