@@ -1,7 +1,7 @@
 pipeline {
     agent {
         kubernetes {
-            label 'flask-agent'
+            label 'jenkins-jenkins-agent'
             defaultContainer 'tools'
         }
     }
@@ -31,11 +31,11 @@ pipeline {
             steps {
                 container('docker') {
                     sh '''
-                        echo "🔐 Logging into ECR..."
+                        echo "Logging into ECR..."
                         aws ecr get-login-password --region $AWS_REGION \
                           | docker login --username AWS --password-stdin ${ECR_REPO%/*}
 
-                        echo "🐳 Building Docker image..."
+                        echo "Building Docker image..."
                         docker build -t $ECR_REPO:$IMAGE_TAG .
                     '''
                 }
@@ -46,11 +46,8 @@ pipeline {
             steps {
                 container('docker') {
                     sh '''
-                        echo "⬆️  Pushing image to ECR..."
+                        echo "Pushing to ECR..."
                         docker push $ECR_REPO:$IMAGE_TAG
-
-                        echo "✔ Image successfully pushed:"
-                        echo "$ECR_REPO:$IMAGE_TAG"
                     '''
                 }
             }
