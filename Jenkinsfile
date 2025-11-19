@@ -31,6 +31,10 @@ pipeline {
             steps {
                 container('docker') {
                     sh '''
+                        echo "Installing AWS CLI in docker container..."
+                        apk add --no-cache python3 py3-pip
+                        pip install awscli
+
                         echo "Logging into ECR..."
                         aws ecr get-login-password --region $AWS_REGION \
                           | docker login --username AWS --password-stdin ${ECR_REPO%/*}
