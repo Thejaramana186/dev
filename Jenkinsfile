@@ -8,7 +8,8 @@ pipeline {
 
     environment {
         AWS_REGION = "us-east-1"
-        ECR_REPO = "979750876373.dkr.ecr.us-east-1.amazonaws.com/stock-app"
+        ECR_ACCOUNT = "979750876373"
+        ECR_REPO = "${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/stock-app"
         IMAGE_TAG = "v${BUILD_NUMBER}"
         GIT_BRANCH = "main"
     }
@@ -27,30 +28,22 @@ pipeline {
             }
         }
 
-        stage('Docker Build') {
+        stage('Docker Build & Push') {
             steps {
                 container('docker') {
                     sh '''
-                        echo "Installing AWS CLI in docker container..."
+                        echo "=== Installing AWS CLI ==="
                         apk add --no-cache python3 py3-pip
-                        pip install awscli
+                        pip3 install awscli
 
-                        echo "Logging into ECR..."
+                        echo "=== Logging into ECR ==="
                         aws ecr get-login-password --region $AWS_REGION \
-                          | docker login --username AWS --password-stdin ${ECR_REPO%/*}
+                            | docker login --username AWS --password-stdin $ECR_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com
 
-                        echo "Building Docker image..."
+                        echo "=== Building Docker image ==="
                         docker build -t $ECR_REPO:$IMAGE_TAG .
-                    '''
-                }
-            }
-        }
 
-        stage('Docker Push') {
-            steps {
-                container('docker') {
-                    sh '''
-                        echo "Pushing to ECR..."
+                        echo "=== Pushing Docker image to ECR ==="
                         docker push $ECR_REPO:$IMAGE_TAG
                     '''
                 }
