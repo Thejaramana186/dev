@@ -1,7 +1,7 @@
 pipeline {
     agent {
         kubernetes {
-            label 'jenkins-jenkins-agent'
+            inheritFrom 'jenkins-jenkins-agent'
             defaultContainer 'tools'
         }
     }
