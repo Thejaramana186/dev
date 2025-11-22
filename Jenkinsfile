@@ -8,35 +8,43 @@ metadata:
   labels:
     jenkins: agent
 spec:
+  serviceAccountName: jenkins
   containers:
-    - name: dind
-      image: docker:24.0.5-dind
-      securityContext:
-        privileged: true
-      tty: true
-      command:
-        - dockerd-entrypoint.sh
-      args:
-        - --host=tcp://0.0.0.0:2375
-      ports:
-        - containerPort: 2375
-      volumeMounts:
-        - name: docker-graph-storage
-          mountPath: /var/lib/docker
-    - name: tools
-      image: docker:24.0.5-cli
-      tty: true
-      command:
-        - cat
-      env:
-        - name: DOCKER_HOST
-          value: tcp://localhost:2375
-    - name: jnlp
-      image: jenkins/inbound-agent:latest
+  - name: dind
+    image: docker:24.0.5-dind
+    securityContext:
+      privileged: true
+    command:
+    - dockerd-entrypoint.sh
+    args:
+    - "--host=tcp://0.0.0.0:2375"
+    ports:
+    - containerPort: 2375
+    volumeMounts:
+    - name: docker-storage
+      mountPath: /var/lib/docker
+  - name: tools
+    image: docker:24.0.5-cli
+    tty: true
+    env:
+    - name: DOCKER_HOST
+      value: tcp://localhost:2375
+    command:
+    - sh
+    args:
+    - -c
+    - |
+      echo "Waiting for Docker daemon..."
+      while ! docker info >/dev/null 2>&1; do
+        sleep 2
+      done
+      cat
+    volumeMounts:
+    - name: docker-storage
+      mountPath: /var/lib/docker
   volumes:
-    - name: docker-graph-storage
-      emptyDir: {}
-  restartPolicy: Never
+  - name: docker-storage
+    emptyDir: {}
 """
         }
     }
@@ -50,7 +58,6 @@ spec:
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
                 container('tools') {
@@ -75,7 +82,7 @@ spec:
 
                         echo "=== Logging into ECR ==="
                         aws ecr get-login-password --region $AWS_REGION \
-                            | docker login --username AWS --password-stdin $ECR_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com
+                          | docker login --username AWS --password-stdin $ECR_REPO
 
                         echo "=== Building Docker image ==="
                         docker build -t $ECR_REPO:$IMAGE_TAG .
