@@ -1,8 +1,36 @@
 pipeline {
     agent {
         kubernetes {
-            inheritFrom 'jenkins-jenkins-agent'
-            defaultContainer 'tools'
+            yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins: agent
+spec:
+  containers:
+    - name: docker
+      image: docker:24.0.5-dind
+      tty: true
+      command:
+        - cat
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+    - name: tools
+      image: alpine:3.18
+      command:
+        - cat
+      tty: true
+    - name: jnlp
+      image: jenkins/inbound-agent:latest
+  volumes:
+    - name: docker-sock
+      hostPath:
+        path: /var/run/docker.sock
+"""
         }
     }
 
@@ -18,13 +46,15 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                checkout([$class: 'GitSCM',
-                    branches: [[name: "*/${GIT_BRANCH}"]],
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/Thejaramana186/dev.git',
-                        credentialsId: 'github-creds'
-                    ]]
-                ])
+                container('tools') {
+                    checkout([$class: 'GitSCM',
+                        branches: [[name: "*/${GIT_BRANCH}"]],
+                        userRemoteConfigs: [[
+                            url: 'https://github.com/Thejaramana186/dev.git',
+                            credentialsId: 'github-creds'
+                        ]]
+                    ])
+                }
             }
         }
 
