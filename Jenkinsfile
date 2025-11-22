@@ -10,14 +10,22 @@ metadata:
 spec:
   serviceAccountName: jenkins
   containers:
-  - name: tools
-    image: gcr.io/kaniko-project/executor:latest
-    tty: true
+  - name: alpine
+    image: alpine:3.18
     command:
-      - sh
-    args:
-      - -c
       - cat
+    tty: true
+    volumeMounts:
+      - name: jenkins-workspace
+        mountPath: /home/jenkins/agent
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:latest
+    args:
+      - --context=/home/jenkins/agent
+      - --dockerfile=/home/jenkins/agent/Dockerfile
+      - --destination=979750876373.dkr.ecr.us-east-1.amazonaws.com/stock-app:v$BUILD_NUMBER
+      - --cache=true
+      - --cache-dir=/cache
     volumeMounts:
       - name: jenkins-workspace
         mountPath: /home/jenkins/agent
@@ -44,37 +52,27 @@ spec:
     stages {
         stage('Checkout Code') {
             steps {
-                container('tools') {
-                    checkout([$class: 'GitSCM',
-                        branches: [[name: "*/${GIT_BRANCH}"]],
-                        userRemoteConfigs: [[
-                            url: 'https://github.com/Thejaramana186/dev.git',
-                            credentialsId: 'github-creds'
-                        ]]
-                    ])
+                container('alpine') {
+                    sh '''
+                      apk add --no-cache git
+                      git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
+                    '''
                 }
             }
         }
 
         stage('Build & Push to ECR') {
             steps {
-                container('tools') {
+                container('alpine') {
                     sh '''
-                        echo "=== Installing AWS CLI ==="
-                        apk add --no-cache python3 py3-pip >/dev/null
-                        pip3 install awscli >/dev/null
-
-                        echo "=== Building & Pushing Docker Image via Kaniko ==="
-                        mkdir -p /kaniko/.docker
-                        echo "{\"credHelpers\": {\"${AWS_REGION}.amazonaws.com\": \"ecr-login\"}}" > /kaniko/.docker/config.json
-
-                        /kaniko/executor \
-                          --context . \
-                          --dockerfile Dockerfile \
-                          --destination $ECR_REPO:$IMAGE_TAG \
-                          --cache=true \
-                          --cache-dir=/cache
+                      apk add --no-cache python3 py3-pip
+                      pip3 install awscli
+                      mkdir -p /kaniko/.docker
+                      echo "{\"credHelpers\": {\"${AWS_REGION}.amazonaws.com\": \"ecr-login\"}}" > /kaniko/.docker/config.json
                     '''
+                }
+                container('kaniko') {
+                    echo "✅ Building and pushing Docker image using Kaniko..."
                 }
             }
         }
