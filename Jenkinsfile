@@ -20,17 +20,14 @@ spec:
         mountPath: /home/jenkins/agent
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
-    command:
-      - sh
-      - -c
-      - |
-        echo "Building Docker image with Kaniko..."
-        /kaniko/executor \
-          --context=/home/jenkins/agent \
-          --dockerfile=/home/jenkins/agent/Dockerfile \
-          --destination=979750876373.dkr.ecr.us-east-1.amazonaws.com/stock-app:v$BUILD_NUMBER \
-          --cache=true \
-          --cache-dir=/cache
+    args:
+      - "--context=/home/jenkins/agent"
+      - "--dockerfile=/home/jenkins/agent/Dockerfile"
+      - "--destination=979750876373.dkr.ecr.us-east-1.amazonaws.com/stock-app:v${BUILD_NUMBER}"
+      - "--cache=true"
+      - "--cache-dir=/cache"
+      - "--single-snapshot"
+      - "--use-new-run"
     volumeMounts:
       - name: jenkins-workspace
         mountPath: /home/jenkins/agent
@@ -81,5 +78,14 @@ spec:
                 }
             }
         }
+
+        stage('Build & Push with Kaniko') {
+            steps {
+                container('kaniko') {
+                    echo "Building and pushing image to ECR..."
+                }
+            }
+        }
     }
 }
+
