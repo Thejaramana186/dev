@@ -9,27 +9,27 @@ metadata:
     jenkins: agent
 spec:
   containers:
-    - name: docker
+    - name: dind
       image: docker:24.0.5-dind
-      tty: true
-      command:
-        - cat
       securityContext:
         privileged: true
-      volumeMounts:
-        - name: docker-sock
-          mountPath: /var/run/docker.sock
+      tty: true
+      command:
+        - dockerd-entrypoint.sh
+      args:
+        - --host=tcp://0.0.0.0:2375
+        - --host=unix:///var/run/docker.sock
     - name: tools
-      image: alpine:3.18
+      image: docker:24.0.5-cli
+      tty: true
       command:
         - cat
-      tty: true
+      env:
+        - name: DOCKER_HOST
+          value: tcp://localhost:2375
     - name: jnlp
       image: jenkins/inbound-agent:latest
-  volumes:
-    - name: docker-sock
-      hostPath:
-        path: /var/run/docker.sock
+  restartPolicy: Never
 """
         }
     }
@@ -60,7 +60,7 @@ spec:
 
         stage('Docker Build & Push') {
             steps {
-                container('docker') {
+                container('tools') {
                     sh '''
                         echo "=== Installing AWS CLI ==="
                         apk add --no-cache python3 py3-pip
@@ -79,6 +79,5 @@ spec:
                 }
             }
         }
-
     }
 }
