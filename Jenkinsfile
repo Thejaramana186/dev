@@ -10,40 +10,24 @@ metadata:
 spec:
   serviceAccountName: jenkins
   containers:
-  - name: dind
-    image: docker:24.0.5-dind
-    securityContext:
-      privileged: true
-    command:
-    - dockerd-entrypoint.sh
-    args:
-    - "--host=tcp://0.0.0.0:2375"
-    ports:
-    - containerPort: 2375
-    volumeMounts:
-    - name: docker-storage
-      mountPath: /var/lib/docker
   - name: tools
-    image: docker:24.0.5-cli
+    image: gcr.io/kaniko-project/executor:latest
     tty: true
-    env:
-    - name: DOCKER_HOST
-      value: tcp://localhost:2375
     command:
-    - sh
+      - sh
     args:
-    - -c
-    - |
-      echo "Waiting for Docker daemon..."
-      while ! docker info >/dev/null 2>&1; do
-        sleep 2
-      done
-      cat
+      - -c
+      - cat
     volumeMounts:
-    - name: docker-storage
-      mountPath: /var/lib/docker
+      - name: jenkins-workspace
+        mountPath: /home/jenkins/agent
+      - name: kaniko-cache
+        mountPath: /cache
   volumes:
-  - name: docker-storage
+  - name: jenkins-workspace
+    persistentVolumeClaim:
+      claimName: jenkins
+  - name: kaniko-cache
     emptyDir: {}
 """
         }
@@ -72,23 +56,24 @@ spec:
             }
         }
 
-        stage('Docker Build & Push') {
+        stage('Build & Push to ECR') {
             steps {
                 container('tools') {
                     sh '''
                         echo "=== Installing AWS CLI ==="
-                        apk add --no-cache python3 py3-pip
-                        pip3 install awscli
+                        apk add --no-cache python3 py3-pip >/dev/null
+                        pip3 install awscli >/dev/null
 
-                        echo "=== Logging into ECR ==="
-                        aws ecr get-login-password --region $AWS_REGION \
-                          | docker login --username AWS --password-stdin $ECR_REPO
+                        echo "=== Building & Pushing Docker Image via Kaniko ==="
+                        mkdir -p /kaniko/.docker
+                        echo "{\"credHelpers\": {\"${AWS_REGION}.amazonaws.com\": \"ecr-login\"}}" > /kaniko/.docker/config.json
 
-                        echo "=== Building Docker image ==="
-                        docker build -t $ECR_REPO:$IMAGE_TAG .
-
-                        echo "=== Pushing Docker image to ECR ==="
-                        docker push $ECR_REPO:$IMAGE_TAG
+                        /kaniko/executor \
+                          --context . \
+                          --dockerfile Dockerfile \
+                          --destination $ECR_REPO:$IMAGE_TAG \
+                          --cache=true \
+                          --cache-dir=/cache
                     '''
                 }
             }
