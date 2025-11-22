@@ -21,13 +21,16 @@ spec:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
     command:
-      - /kaniko/executor
-    args:
-      - "--context=/home/jenkins/agent"
-      - "--dockerfile=/home/jenkins/agent/Dockerfile"
-      - "--destination=979750876373.dkr.ecr.us-east-1.amazonaws.com/stock-app:v$BUILD_NUMBER"
-      - "--cache=true"
-      - "--cache-dir=/cache"
+      - sh
+      - -c
+      - |
+        echo "Building Docker image with Kaniko..."
+        /kaniko/executor \
+          --context=/home/jenkins/agent \
+          --dockerfile=/home/jenkins/agent/Dockerfile \
+          --destination=979750876373.dkr.ecr.us-east-1.amazonaws.com/stock-app:v$BUILD_NUMBER \
+          --cache=true \
+          --cache-dir=/cache
     volumeMounts:
       - name: jenkins-workspace
         mountPath: /home/jenkins/agent
@@ -63,21 +66,18 @@ spec:
             }
         }
 
-        stage('Build & Push to ECR') {
+        stage('Prepare AWS Auth for Kaniko') {
             steps {
                 container('alpine') {
                     sh '''
-                      echo "=== Installing AWS CLI ==="
+                      echo "Installing AWS CLI..."
                       apk add --no-cache python3 py3-pip
                       pip3 install awscli
 
-                      echo "=== Creating Docker config for Kaniko ==="
+                      echo "Configuring ECR Auth..."
                       mkdir -p /kaniko/.docker
                       echo "{\"credHelpers\": {\"${AWS_REGION}.amazonaws.com\": \"ecr-login\"}}" > /kaniko/.docker/config.json
                     '''
-                }
-                container('kaniko') {
-                    echo "🚀 Building and pushing Docker image using Kaniko..."
                 }
             }
         }
