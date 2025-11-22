@@ -18,7 +18,11 @@ spec:
         - dockerd-entrypoint.sh
       args:
         - --host=tcp://0.0.0.0:2375
-        - --host=unix:///var/run/docker.sock
+      ports:
+        - containerPort: 2375
+      volumeMounts:
+        - name: docker-graph-storage
+          mountPath: /var/lib/docker
     - name: tools
       image: docker:24.0.5-cli
       tty: true
@@ -29,6 +33,9 @@ spec:
           value: tcp://localhost:2375
     - name: jnlp
       image: jenkins/inbound-agent:latest
+  volumes:
+    - name: docker-graph-storage
+      emptyDir: {}
   restartPolicy: Never
 """
         }
