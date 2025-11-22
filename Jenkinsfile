@@ -1,7 +1,7 @@
 pipeline {
-  agent {
-    kubernetes {
-      yaml """
+    agent {
+        kubernetes {
+            yaml """
 apiVersion: v1
 kind: Pod
 metadata:
@@ -21,15 +21,8 @@ spec:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
     command:
-      - /kaniko/executor
-    args:
-      - "--context=/home/jenkins/agent"
-      - "--dockerfile=/home/jenkins/agent/Dockerfile"
-      - "--destination=979750876373.dkr.ecr.us-east-1.amazonaws.com/stock-app:v${BUILD_NUMBER}"
-      - "--cache=true"
-      - "--cache-dir=/cache"
-      - "--use-new-run"
-      - "--single-snapshot"
+      - cat
+    tty: true
     volumeMounts:
       - name: jenkins-workspace
         mountPath: /home/jenkins/agent
@@ -42,52 +35,61 @@ spec:
   - name: kaniko-cache
     emptyDir: {}
 """
-    }
-  }
-
-  environment {
-    AWS_REGION = "us-east-1"
-    ECR_ACCOUNT = "979750876373"
-    ECR_REPO = "${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/stock-app"
-    IMAGE_TAG = "v${BUILD_NUMBER}"
-    GIT_BRANCH = "main"
-  }
-
-  stages {
-    stage('Checkout Code') {
-      steps {
-        container('alpine') {
-          sh '''
-            apk add --no-cache git
-            git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
-          '''
         }
-      }
     }
 
-    stage('Prepare AWS Auth for Kaniko') {
-      steps {
-        container('alpine') {
-          sh '''
-            echo "Installing AWS CLI..."
-            apk add --no-cache python3 py3-pip
-            pip3 install awscli
+    environment {
+        AWS_REGION = "us-east-1"
+        ECR_ACCOUNT = "979750876373"
+        ECR_REPO = "${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/stock-app"
+        IMAGE_TAG = "v${BUILD_NUMBER}"
+        GIT_BRANCH = "main"
+    }
 
-            echo "Creating Kaniko ECR Auth..."
-            mkdir -p /kaniko/.docker
-            echo "{\"credHelpers\": {\"${AWS_REGION}.amazonaws.com\": \"ecr-login\"}}" > /kaniko/.docker/config.json
-          '''
+    stages {
+        stage('Checkout Code') {
+            steps {
+                container('alpine') {
+                    sh '''
+                      apk add --no-cache git
+                      git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
+                    '''
+                }
+            }
         }
-      }
-    }
 
-    stage('Build & Push with Kaniko') {
-      steps {
-        container('kaniko') {
-          echo "✅ Kaniko is building and pushing the image..."
+        stage('Prepare AWS Auth') {
+            steps {
+                container('alpine') {
+                    sh '''
+                      echo "Installing AWS CLI..."
+                      apk add --no-cache python3 py3-pip
+                      pip3 install awscli
+
+                      echo "Setting up ECR auth config for Kaniko..."
+                      mkdir -p /kaniko/.docker
+                      echo "{\"credHelpers\": {\"${AWS_REGION}.amazonaws.com\": \"ecr-login\"}}" > /kaniko/.docker/config.json
+                    '''
+                }
+            }
         }
-      }
+
+        stage('Build & Push Image') {
+            steps {
+                container('kaniko') {
+                    sh '''
+                      echo "Building and pushing image using Kaniko..."
+                      /kaniko/executor \
+                        --context=/home/jenkins/agent \
+                        --dockerfile=/home/jenkins/agent/Dockerfile \
+                        --destination=${ECR_REPO}:${IMAGE_TAG} \
+                        --cache=true \
+                        --cache-dir=/cache \
+                        --single-snapshot \
+                        --use-new-run
+                    '''
+                }
+            }
+        }
     }
-  }
 }
-
