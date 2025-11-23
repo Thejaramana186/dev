@@ -54,13 +54,13 @@ spec:
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
                 container('tools') {
                     sh '''
-                      echo "=== Checking out code ==="
-                      apk add --no-cache git
-                      git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
+                      echo "=== Code Checkout Done Automatically by Jenkins ==="
+                      ls -la
                     '''
                 }
             }
@@ -74,24 +74,46 @@ spec:
                       apk add --no-cache python3 py3-pip
                       pip3 install awscli
 
-                      echo "=== Ensuring ECR repository exists ==="
+                      echo "=== Ensuring ECR Repository Exists ==="
                       aws ecr describe-repositories --repository-names stock-app --region $AWS_REGION || \
                       aws ecr create-repository --repository-name stock-app --region $AWS_REGION
 
                       echo "=== Logging into ECR ==="
-                      aws ecr get-login-password --region $AWS_REGION \
-                        | docker login --username AWS --password-stdin $ECR_REPO
+                      aws ecr get-login-password --region $AWS_REGION | \
+                        docker login --username AWS --password-stdin $ECR_REPO
 
-                      echo "=== Building Docker image ==="
-                      docker build -t $ECR_REPO:$IMAGE_TAG .
+                      echo "=== Building Docker Image ==="
+                      docker build -t $ECR_REPO:$IMAGE_TAG -t $ECR_REPO:latest .
 
-                      echo "=== Pushing Docker image to ECR ==="
+                      echo "=== Pushing Docker Image to ECR ==="
                       docker push $ECR_REPO:$IMAGE_TAG
+                      docker push $ECR_REPO:latest
 
-                      echo "✅ Docker image successfully pushed to ECR"
+                      echo "✅ Docker Image Successfully Built and Pushed to ECR"
+                      echo "Image: $ECR_REPO:$IMAGE_TAG"
                     '''
                 }
             }
+        }
+
+        stage('Post-Build Cleanup (Optional)') {
+            steps {
+                container('tools') {
+                    sh '''
+                      echo "=== Cleaning up local Docker cache ==="
+                      docker system prune -af || true
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Build ${BUILD_NUMBER} completed successfully and pushed to ECR!"
+        }
+        failure {
+            echo "❌ Build ${BUILD_NUMBER} failed. Check logs for details."
         }
     }
 }
