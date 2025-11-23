@@ -9,6 +9,7 @@ metadata:
     jenkins: agent
 spec:
   serviceAccountName: jenkins
+  shareProcessNamespace: true
   containers:
   - name: docker
     image: docker:24.0.5-dind
@@ -17,7 +18,8 @@ spec:
     command:
       - dockerd-entrypoint.sh
     args:
-      - "--host=tcp://0.0.0.0:2375"
+      - "--host=tcp://127.0.0.1:2375"
+      - "--host=unix:///var/run/docker.sock"
     ports:
       - containerPort: 2375
     volumeMounts:
@@ -28,7 +30,7 @@ spec:
     tty: true
     env:
       - name: DOCKER_HOST
-        value: tcp://localhost:2375
+        value: tcp://127.0.0.1:2375
     command:
       - sh
       - -c
@@ -56,8 +58,7 @@ spec:
             steps {
                 container('tools') {
                     sh '''
-                      echo "=== Cleaning workspace and checking out code ==="
-                      rm -rf ./* ./.??*
+                      echo "=== Checking out code ==="
                       apk add --no-cache git
                       git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
                     '''
@@ -79,7 +80,7 @@ spec:
 
                       echo "=== Logging into ECR ==="
                       aws ecr get-login-password --region $AWS_REGION \
-                        | docker login --username AWS --password-stdin $ECR_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com
+                        | docker login --username AWS --password-stdin $ECR_REPO
 
                       echo "=== Building Docker image ==="
                       docker build -t $ECR_REPO:$IMAGE_TAG .
@@ -87,7 +88,7 @@ spec:
                       echo "=== Pushing Docker image to ECR ==="
                       docker push $ECR_REPO:$IMAGE_TAG
 
-                      echo "✅ Docker image pushed successfully to ECR ==="
+                      echo "✅ Docker image successfully pushed to ECR"
                     '''
                 }
             }
