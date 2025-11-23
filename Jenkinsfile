@@ -9,9 +9,7 @@ spec:
   containers:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
-    args:
-    - sleep
-    - infinity
+    args: ["--help"]
     tty: true
     volumeMounts:
     - name: kaniko-secret
@@ -38,11 +36,11 @@ spec:
             }
         }
 
-        stage('Build & Push Image to ECR') {
+        stage('Build & Push to ECR') {
             steps {
                 container('kaniko') {
                     sh '''
-                        echo "=== Building and pushing image to ECR with Kaniko ==="
+                        echo "=== Building and pushing image using Kaniko ==="
                         /kaniko/executor \
                           --context `pwd` \
                           --dockerfile `pwd`/Dockerfile \
