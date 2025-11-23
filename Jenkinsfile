@@ -56,7 +56,7 @@ spec:
             steps {
                 container('tools') {
                     sh '''
-                      apk add --no-cache git -y 
+                      apk add --no-cache git 
                       git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
                     '''
                 }
