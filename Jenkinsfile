@@ -7,7 +7,7 @@ kind: Pod
 spec:
   containers:
   - name: tools
-    image: amazon/aws-cli:2.15.13
+    image: docker:24.0.5-cli
     command:
     - cat
     tty: true
@@ -36,6 +36,19 @@ spec:
             }
         }
 
+        stage('Install AWS CLI') {
+            steps {
+                container('tools') {
+                    sh '''
+                        echo "=== Installing AWS CLI ==="
+                        apk add --no-cache python3 py3-pip curl
+                        pip3 install awscli
+                        aws --version
+                    '''
+                }
+            }
+        }
+
         stage('Build & Push to ECR') {
             steps {
                 container('tools') {
@@ -44,10 +57,13 @@ spec:
                         aws ecr describe-repositories --repository-names stock-app --region $AWS_REGION || \
                         aws ecr create-repository --repository-name stock-app --region $AWS_REGION
 
-                        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
+                        aws ecr get-login-password --region $AWS_REGION | \
+                        docker login --username AWS --password-stdin $ECR_REPO
 
-                        echo "=== Building & Pushing Docker image ==="
+                        echo "=== Building Docker image ==="
                         docker build -t $ECR_REPO:$IMAGE_TAG -t $ECR_REPO:latest .
+
+                        echo "=== Pushing Docker image ==="
                         docker push $ECR_REPO:$IMAGE_TAG
                         docker push $ECR_REPO:latest
                     '''
@@ -58,7 +74,7 @@ spec:
 
     post {
         success {
-            echo "✅ Flask app successfully built and pushed to ECR!"
+            echo "✅ Successfully built and pushed to ECR!"
         }
         failure {
             echo "❌ Build failed. Check logs."
