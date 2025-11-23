@@ -1,5 +1,10 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'amazon/aws-cli:2.15.13'
+            args '-v /var/run/docker.sock:/var/run/docker.sock -u root'
+        }
+    }
 
     environment {
         AWS_REGION = "us-east-1"
@@ -11,7 +16,7 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
-                echo "=== Checking out code from GitHub ==="
+                echo "=== Checking out code ==="
                 checkout scm
             }
         }
@@ -47,23 +52,14 @@ pipeline {
                 '''
             }
         }
-
-        stage('Clean Up Docker') {
-            steps {
-                sh '''
-                    echo "=== Cleaning up local Docker images ==="
-                    docker system prune -af || true
-                '''
-            }
-        }
     }
 
     post {
         success {
-            echo "✅ Image successfully built and pushed to ECR!"
+            echo "✅ Image pushed successfully to ECR!"
         }
         failure {
-            echo "❌ Build failed. Check logs for errors."
+            echo "❌ Build failed. Check logs for details."
         }
     }
 }
