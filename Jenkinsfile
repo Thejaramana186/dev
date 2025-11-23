@@ -1,10 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'amazon/aws-cli:2.15.13'
-            args '-v /var/run/docker.sock:/var/run/docker.sock -u root'
-        }
-    }
+    agent any
 
     environment {
         AWS_REGION = "us-east-1"
@@ -14,9 +9,23 @@ pipeline {
     }
 
     stages {
+        stage('Install AWS CLI and Docker (if missing)') {
+            steps {
+                sh '''
+                    echo "=== Installing AWS CLI and Docker ==="
+                    if ! command -v aws >/dev/null 2>&1; then
+                        apt-get update -y || yum update -y
+                        apt-get install -y python3-pip docker.io || yum install -y python3-pip docker
+                        pip3 install awscli
+                    fi
+                    docker --version || echo "Docker installed successfully"
+                '''
+            }
+        }
+
         stage('Checkout Code') {
             steps {
-                echo "=== Checking out code ==="
+                echo "=== Checking out code from GitHub ==="
                 checkout scm
             }
         }
@@ -27,7 +36,7 @@ pipeline {
                     echo "=== Logging into AWS ECR ==="
                     aws ecr describe-repositories --repository-names stock-app --region $AWS_REGION || \
                     aws ecr create-repository --repository-name stock-app --region $AWS_REGION
-
+                    
                     aws ecr get-login-password --region $AWS_REGION | \
                     docker login --username AWS --password-stdin $ECR_REPO
                 '''
@@ -52,14 +61,23 @@ pipeline {
                 '''
             }
         }
+
+        stage('Clean Up Docker') {
+            steps {
+                sh '''
+                    echo "=== Cleaning up Docker images ==="
+                    docker system prune -af || true
+                '''
+            }
+        }
     }
 
     post {
         success {
-            echo "✅ Image pushed successfully to ECR!"
+            echo "✅ Successfully pushed image to ECR!"
         }
         failure {
-            echo "❌ Build failed. Check logs for details."
+            echo "❌ Build failed. Check logs."
         }
     }
 }
