@@ -5,19 +5,20 @@ pipeline {
 apiVersion: v1
 kind: Pod
 spec:
+  serviceAccountName: jenkins
   containers:
-  - name: tools
-    image: docker:24.0.5-cli
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:latest
     command:
     - cat
     tty: true
     volumeMounts:
-    - name: docker-sock
-      mountPath: /var/run/docker.sock
+    - name: kaniko-secret
+      mountPath: /kaniko/.docker/
   volumes:
-  - name: docker-sock
-    hostPath:
-      path: /var/run/docker.sock
+  - name: kaniko-secret
+    secret:
+      secretName: regcred
 '''
         }
     }
@@ -36,36 +37,17 @@ spec:
             }
         }
 
-        stage('Install AWS CLI') {
+        stage('Build & Push with Kaniko') {
             steps {
-                container('tools') {
+                container('kaniko') {
                     sh '''
-                        echo "=== Installing AWS CLI ==="
-                        apk add --no-cache python3 py3-pip curl
-                        pip3 install awscli
-                        aws --version
-                    '''
-                }
-            }
-        }
-
-        stage('Build & Push to ECR') {
-            steps {
-                container('tools') {
-                    sh '''
-                        echo "=== Logging into AWS ECR ==="
-                        aws ecr describe-repositories --repository-names stock-app --region $AWS_REGION || \
-                        aws ecr create-repository --repository-name stock-app --region $AWS_REGION
-
-                        aws ecr get-login-password --region $AWS_REGION | \
-                        docker login --username AWS --password-stdin $ECR_REPO
-
-                        echo "=== Building Docker image ==="
-                        docker build -t $ECR_REPO:$IMAGE_TAG -t $ECR_REPO:latest .
-
-                        echo "=== Pushing Docker image ==="
-                        docker push $ECR_REPO:$IMAGE_TAG
-                        docker push $ECR_REPO:latest
+                        echo "=== Building & pushing image using Kaniko ==="
+                        /kaniko/executor \
+                          --context `pwd` \
+                          --dockerfile `pwd`/Dockerfile \
+                          --destination $ECR_REPO:$IMAGE_TAG \
+                          --destination $ECR_REPO:latest \
+                          --verbosity debug
                     '''
                 }
             }
@@ -74,7 +56,7 @@ spec:
 
     post {
         success {
-            echo "✅ Successfully built and pushed to ECR!"
+            echo "✅ Image built & pushed to ECR successfully!"
         }
         failure {
             echo "❌ Build failed. Check logs."
