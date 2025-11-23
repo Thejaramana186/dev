@@ -56,7 +56,8 @@ spec:
             steps {
                 container('tools') {
                     sh '''
-                      apk add --no-cache git 
+                      echo "=== Checking out code ==="
+                      apk add --no-cache git
                       git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
                     '''
                 }
@@ -73,13 +74,15 @@ spec:
 
                       echo "=== Logging into ECR ==="
                       aws ecr get-login-password --region $AWS_REGION \
-                        | docker login --username AWS --password-stdin $ECR_REPO
+                        | docker login --username AWS --password-stdin $ECR_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com
 
                       echo "=== Building Docker image ==="
                       docker build -t $ECR_REPO:$IMAGE_TAG .
 
                       echo "=== Pushing Docker image to ECR ==="
                       docker push $ECR_REPO:$IMAGE_TAG
+
+                      echo "✅ Docker image pushed successfully to ECR ==="
                     '''
                 }
             }
