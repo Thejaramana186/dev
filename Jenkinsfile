@@ -9,8 +9,9 @@ spec:
   containers:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
-    command:
-    - cat
+    args:
+    - sleep
+    - infinity
     tty: true
     volumeMounts:
     - name: kaniko-secret
@@ -37,11 +38,11 @@ spec:
             }
         }
 
-        stage('Build & Push with Kaniko') {
+        stage('Build & Push Image to ECR') {
             steps {
                 container('kaniko') {
                     sh '''
-                        echo "=== Building & pushing image using Kaniko ==="
+                        echo "=== Building and pushing image to ECR with Kaniko ==="
                         /kaniko/executor \
                           --context `pwd` \
                           --dockerfile `pwd`/Dockerfile \
@@ -56,7 +57,7 @@ spec:
 
     post {
         success {
-            echo "✅ Flask app image built and pushed to ECR successfully!"
+            echo "✅ Image built and pushed to ECR successfully!"
         }
         failure {
             echo "❌ Build failed. Check logs."
