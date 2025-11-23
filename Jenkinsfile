@@ -10,33 +10,34 @@ metadata:
 spec:
   serviceAccountName: jenkins
   containers:
-  - name: alpine
-    image: alpine:3.18
+  - name: docker
+    image: docker:24.0.5-dind
+    securityContext:
+      privileged: true
     command:
-      - /bin/sh
+      - dockerd-entrypoint.sh
+    args:
+      - "--host=tcp://0.0.0.0:2375"
+    ports:
+      - containerPort: 2375
+    volumeMounts:
+      - name: docker-storage
+        mountPath: /var/lib/docker
+  - name: tools
+    image: docker:24.0.5-cli
+    tty: true
+    env:
+      - name: DOCKER_HOST
+        value: tcp://localhost:2375
+    command:
+      - sh
       - -c
       - cat
-    tty: true
     volumeMounts:
-      - name: jenkins-workspace
-        mountPath: /home/jenkins/agent
-  - name: kaniko
-    image: gcr.io/kaniko-project/executor:debug
-    command:
-      - /busybox/sh
-      - -c
-      - cat
-    tty: true
-    volumeMounts:
-      - name: jenkins-workspace
-        mountPath: /home/jenkins/agent
-      - name: kaniko-cache
-        mountPath: /cache
+      - name: docker-storage
+        mountPath: /var/lib/docker
   volumes:
-  - name: jenkins-workspace
-    persistentVolumeClaim:
-      claimName: jenkins
-  - name: kaniko-cache
+  - name: docker-storage
     emptyDir: {}
 """
         }
@@ -53,29 +54,10 @@ spec:
     stages {
         stage('Checkout Code') {
             steps {
-                container('alpine') {
+                container('tools') {
                     sh '''
-                    echo "=== Checking out code ==="
-                    apk add --no-cache git
-                    git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
-                    '''
-                }
-            }
-        }
-
-        stage('Setup AWS CLI') {
-            steps {
-                container('alpine') {
-                    sh '''
-                    echo "=== Installing AWS CLI and Configuring Kaniko ==="
-                    apk add --no-cache python3 py3-pip
-                    pip3 install awscli
-                    
-                    # ⚠️ CRITICAL FIX: Create the Kaniko config in the SHARED workspace (/home/jenkins/agent)
-                    # Kaniko will look for 'config.json' in a '.docker' directory relative to its
-                    # working directory or specified via --config.
-                    mkdir -p /home/jenkins/agent/.docker
-                    echo "{\"credHelpers\": {\"${ECR_REPO}\": \"ecr-login\"}}" > /home/jenkins/agent/.docker/config.json
+                      apk add --no-cache git -y 
+                      git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
                     '''
                 }
             }
@@ -83,25 +65,21 @@ spec:
 
         stage('Build & Push Docker Image') {
             steps {
-                container('kaniko') {
+                container('tools') {
                     sh '''
-                    echo "=== Building Docker image using Kaniko ==="
-                    
-                    # Verify the config file is present in the shared volume
-                    ls -l /home/jenkins/agent/.docker/config.json
-                    
-                    # The Kaniko executor needs to be told where the configuration is located.
-                    /kaniko/executor \
-                      --context=/home/jenkins/agent \
-                      --dockerfile=/home/jenkins/agent/Dockerfile \
-                      --destination=${ECR_REPO}:${IMAGE_TAG} \
-                      --cache=true \
-                      --cache-dir=/cache \
-                      --single-snapshot \
-                      --use-new-run \
-                      # ⚠️ CRITICAL FIX: Explicitly point Kaniko to the config file on the shared volume
-                      --dockerfile=/home/jenkins/agent/Dockerfile \
-                      --config=/home/jenkins/agent/.docker/config.json
+                      echo "=== Installing AWS CLI ==="
+                      apk add --no-cache python3 py3-pip
+                      pip3 install awscli
+
+                      echo "=== Logging into ECR ==="
+                      aws ecr get-login-password --region $AWS_REGION \
+                        | docker login --username AWS --password-stdin $ECR_REPO
+
+                      echo "=== Building Docker image ==="
+                      docker build -t $ECR_REPO:$IMAGE_TAG .
+
+                      echo "=== Pushing Docker image to ECR ==="
+                      docker push $ECR_REPO:$IMAGE_TAG
                     '''
                 }
             }
