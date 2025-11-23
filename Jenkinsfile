@@ -13,9 +13,9 @@ spec:
   - name: alpine
     image: alpine:3.18
     command:
-      - sleep
-    args:
-      - infinity
+      - /bin/sh
+      - -c
+      - cat
     tty: true
     volumeMounts:
       - name: jenkins-workspace
@@ -23,9 +23,9 @@ spec:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:debug
     command:
-      - sleep
-    args:
-      - infinity
+      - /busybox/sh
+      - -c
+      - cat
     tty: true
     volumeMounts:
       - name: jenkins-workspace
@@ -55,6 +55,7 @@ spec:
             steps {
                 container('alpine') {
                     sh '''
+                      echo "=== Checking out code ==="
                       apk add --no-cache git
                       git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
                     '''
@@ -66,6 +67,7 @@ spec:
             steps {
                 container('alpine') {
                     sh '''
+                      echo "=== Installing AWS CLI ==="
                       apk add --no-cache python3 py3-pip
                       pip3 install awscli
                       mkdir -p /kaniko/.docker
