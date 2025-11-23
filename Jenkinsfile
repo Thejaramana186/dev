@@ -1,7 +1,7 @@
 pipeline {
     agent {
         kubernetes {
-            yaml """
+            yaml '''
 apiVersion: v1
 kind: Pod
 metadata:
@@ -50,7 +50,7 @@ spec:
   volumes:
   - name: docker-storage
     emptyDir: {}
-"""
+'''
         }
     }
 
