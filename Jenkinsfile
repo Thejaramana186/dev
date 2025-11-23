@@ -56,7 +56,8 @@ spec:
             steps {
                 container('tools') {
                     sh '''
-                      echo "=== Checking out code ==="
+                      echo "=== Cleaning workspace and checking out code ==="
+                      rm -rf ./* ./.??*
                       apk add --no-cache git
                       git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
                     '''
@@ -71,6 +72,10 @@ spec:
                       echo "=== Installing AWS CLI ==="
                       apk add --no-cache python3 py3-pip
                       pip3 install awscli
+
+                      echo "=== Ensuring ECR repository exists ==="
+                      aws ecr describe-repositories --repository-names stock-app --region $AWS_REGION || \
+                      aws ecr create-repository --repository-name stock-app --region $AWS_REGION
 
                       echo "=== Logging into ECR ==="
                       aws ecr get-login-password --region $AWS_REGION \
