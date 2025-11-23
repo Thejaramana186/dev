@@ -55,9 +55,9 @@ spec:
             steps {
                 container('alpine') {
                     sh '''
-                      echo "=== Checking out code ==="
-                      apk add --no-cache git
-                      git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
+                    echo "=== Checking out code ==="
+                    apk add --no-cache git
+                    git clone -b ${GIT_BRANCH} https://github.com/Thejaramana186/dev.git .
                     '''
                 }
             }
@@ -67,11 +67,15 @@ spec:
             steps {
                 container('alpine') {
                     sh '''
-                      echo "=== Installing AWS CLI ==="
-                      apk add --no-cache python3 py3-pip
-                      pip3 install awscli
-                      mkdir -p /kaniko/.docker
-                      echo "{\"credHelpers\": {\"${AWS_REGION}.amazonaws.com\": \"ecr-login\"}}" > /kaniko/.docker/config.json
+                    echo "=== Installing AWS CLI and Configuring Kaniko ==="
+                    apk add --no-cache python3 py3-pip
+                    pip3 install awscli
+                    
+                    # ⚠️ CRITICAL FIX: Create the Kaniko config in the SHARED workspace (/home/jenkins/agent)
+                    # Kaniko will look for 'config.json' in a '.docker' directory relative to its
+                    # working directory or specified via --config.
+                    mkdir -p /home/jenkins/agent/.docker
+                    echo "{\"credHelpers\": {\"${ECR_REPO}\": \"ecr-login\"}}" > /home/jenkins/agent/.docker/config.json
                     '''
                 }
             }
@@ -81,15 +85,23 @@ spec:
             steps {
                 container('kaniko') {
                     sh '''
-                      echo "=== Building Docker image using Kaniko ==="
-                      /kaniko/executor \
-                        --context=/home/jenkins/agent \
-                        --dockerfile=/home/jenkins/agent/Dockerfile \
-                        --destination=${ECR_REPO}:${IMAGE_TAG} \
-                        --cache=true \
-                        --cache-dir=/cache \
-                        --single-snapshot \
-                        --use-new-run
+                    echo "=== Building Docker image using Kaniko ==="
+                    
+                    # Verify the config file is present in the shared volume
+                    ls -l /home/jenkins/agent/.docker/config.json
+                    
+                    # The Kaniko executor needs to be told where the configuration is located.
+                    /kaniko/executor \
+                      --context=/home/jenkins/agent \
+                      --dockerfile=/home/jenkins/agent/Dockerfile \
+                      --destination=${ECR_REPO}:${IMAGE_TAG} \
+                      --cache=true \
+                      --cache-dir=/cache \
+                      --single-snapshot \
+                      --use-new-run \
+                      # ⚠️ CRITICAL FIX: Explicitly point Kaniko to the config file on the shared volume
+                      --dockerfile=/home/jenkins/agent/Dockerfile \
+                      --config=/home/jenkins/agent/.docker/config.json
                     '''
                 }
             }
