@@ -13,15 +13,19 @@ spec:
   - name: alpine
     image: alpine:3.18
     command:
-      - cat
+      - sleep
+    args:
+      - infinity
     tty: true
     volumeMounts:
       - name: jenkins-workspace
         mountPath: /home/jenkins/agent
   - name: kaniko
-    image: gcr.io/kaniko-project/executor:latest
+    image: gcr.io/kaniko-project/executor:debug
     command:
-      - cat
+      - sleep
+    args:
+      - infinity
     tty: true
     volumeMounts:
       - name: jenkins-workspace
@@ -58,15 +62,12 @@ spec:
             }
         }
 
-        stage('Prepare AWS Auth') {
+        stage('Setup AWS CLI') {
             steps {
                 container('alpine') {
                     sh '''
-                      echo "Installing AWS CLI..."
                       apk add --no-cache python3 py3-pip
                       pip3 install awscli
-
-                      echo "Setting up ECR auth config for Kaniko..."
                       mkdir -p /kaniko/.docker
                       echo "{\"credHelpers\": {\"${AWS_REGION}.amazonaws.com\": \"ecr-login\"}}" > /kaniko/.docker/config.json
                     '''
@@ -74,11 +75,11 @@ spec:
             }
         }
 
-        stage('Build & Push Image') {
+        stage('Build & Push Docker Image') {
             steps {
                 container('kaniko') {
                     sh '''
-                      echo "Building and pushing image using Kaniko..."
+                      echo "=== Building Docker image using Kaniko ==="
                       /kaniko/executor \
                         --context=/home/jenkins/agent \
                         --dockerfile=/home/jenkins/agent/Dockerfile \
