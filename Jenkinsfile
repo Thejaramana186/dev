@@ -1,25 +1,8 @@
 pipeline {
-    agent {
-        kubernetes {
-            yaml '''
-apiVersion: v1
-kind: Pod
-spec:
-  serviceAccountName: jenkins
-  containers:
-  - name: kaniko
-    image: gcr.io/kaniko-project/executor:latest
-    args: ["--help"]
-    tty: true
-    volumeMounts:
-    - name: kaniko-secret
-      mountPath: /kaniko/.docker/
-  volumes:
-  - name: kaniko-secret
-    secret:
-      secretName: regcred
-'''
-        }
+    agent any
+
+    tools {
+        docker 'docker'
     }
 
     environment {
@@ -32,33 +15,49 @@ spec:
     stages {
         stage('Checkout Code') {
             steps {
+                echo "=== Checking out repository ==="
                 checkout scm
             }
         }
 
-        stage('Build & Push to ECR') {
+        stage('Login to AWS ECR') {
             steps {
-                container('kaniko') {
-                    sh '''
-                        echo "=== Building and pushing image using Kaniko ==="
-                        /kaniko/executor \
-                          --context `pwd` \
-                          --dockerfile `pwd`/Dockerfile \
-                          --destination $ECR_REPO:$IMAGE_TAG \
-                          --destination $ECR_REPO:latest \
-                          --verbosity info
-                    '''
-                }
+                echo "=== Logging into AWS ECR ==="
+                sh '''
+                    aws ecr describe-repositories --repository-names stock-app --region $AWS_REGION || \
+                    aws ecr create-repository --repository-name stock-app --region $AWS_REGION
+
+                    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo "=== Building Docker image ==="
+                sh '''
+                    docker build -t $ECR_REPO:$IMAGE_TAG -t $ECR_REPO:latest .
+                '''
+            }
+        }
+
+        stage('Push Docker Image to ECR') {
+            steps {
+                echo "=== Pushing Docker image to ECR ==="
+                sh '''
+                    docker push $ECR_REPO:$IMAGE_TAG
+                    docker push $ECR_REPO:latest
+                '''
             }
         }
     }
 
     post {
         success {
-            echo "✅ Image built and pushed to ECR successfully!"
+            echo "✅ Docker image built and pushed to ECR successfully!"
         }
         failure {
-            echo "❌ Build failed. Check logs."
+            echo "❌ Build failed. Check the logs for details."
         }
     }
 }
