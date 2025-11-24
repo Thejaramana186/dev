@@ -15,10 +15,14 @@ spec:
     volumeMounts:
     - name: docker-sock
       mountPath: /var/run/docker.sock
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
   volumes:
   - name: docker-sock
     hostPath:
       path: /var/run/docker.sock
+  - name: workspace-volume
+    emptyDir: {}
 '''
         }
     }
@@ -33,6 +37,7 @@ spec:
     stages {
         stage('Checkout Code') {
             steps {
+                echo "=== Checking out repository ==="
                 checkout scm
             }
         }
@@ -41,7 +46,9 @@ spec:
             steps {
                 container('docker') {
                     sh '''
-                        apk add --no-cache docker-cli
+                        echo "=== Installing Docker CLI ==="
+                        apt-get update -y
+                        apt-get install -y docker.io
                         docker --version
                     '''
                 }
@@ -66,7 +73,7 @@ spec:
             steps {
                 container('docker') {
                     sh '''
-                        echo "=== Building and Pushing Docker image ==="
+                        echo "=== Building and pushing image to ECR ==="
                         docker build -t $ECR_REPO:$IMAGE_TAG -t $ECR_REPO:latest .
                         docker push $ECR_REPO:$IMAGE_TAG
                         docker push $ECR_REPO:latest
@@ -81,7 +88,7 @@ spec:
             echo "✅ Docker image built and pushed to ECR successfully!"
         }
         failure {
-            echo "❌ Build failed. Check logs."
+            echo "❌ Build failed. Check logs for details."
         }
     }
 }
