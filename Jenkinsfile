@@ -7,20 +7,26 @@ kind: Pod
 spec:
   serviceAccountName: jenkins
   containers:
-  - name: docker
-    image: docker:24.0.7-cli
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:latest
     command:
     - cat
     tty: true
+    envFrom:
+    - secretRef:
+        name: aws-credentials        # ✅ use envFrom instead of mountPath (simpler & correct)
     volumeMounts:
-    - name: docker-sock
-      mountPath: /var/run/docker.sock
     - name: workspace-volume
       mountPath: /home/jenkins/agent
+  - name: aws
+    image: amazon/aws-cli:2.15.13
+    command:
+    - cat
+    tty: true
+    envFrom:
+    - secretRef:
+        name: aws-credentials        # ✅ AWS CLI container also needs credentials
   volumes:
-  - name: docker-sock
-    hostPath:
-      path: /var/run/docker.sock
   - name: workspace-volume
     emptyDir: {}
 '''
@@ -42,32 +48,42 @@ spec:
             }
         }
 
-        stage('Install AWS CLI') {
+        stage('Login to AWS ECR') {
             steps {
-                container('docker') {
+                container('aws') {
                     sh '''
-                        echo "=== Installing AWS CLI on Alpine ==="
-                        apk add --no-cache aws-cli
-                        aws --version
+                        echo "=== Ensuring ECR Repository Exists ==="
+                        aws ecr describe-repositories --repository-names stock-app --region $AWS_REGION || \
+                        aws ecr create-repository --repository-name stock-app --region $AWS_REGION
+
+                        echo "=== Verifying AWS Authentication ==="
+                        aws sts get-caller-identity
                     '''
                 }
             }
         }
 
-        stage('Login to AWS ECR & Push Image') {
+        stage('Build & Push Docker Image (Kaniko)') {
             steps {
-                container('docker') {
+                container('kaniko') {
                     sh '''
-                        echo "=== Logging into AWS ECR ==="
-                        aws ecr describe-repositories --repository-names stock-app --region $AWS_REGION || \
-                        aws ecr create-repository --repository-name stock-app --region $AWS_REGION
+                        echo "=== Building and pushing image to ECR with Kaniko ==="
 
-                        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com
+                        mkdir -p /kaniko/.docker
+                        cat <<EOF > /kaniko/.docker/config.json
+                        {
+                          "credHelpers": {
+                            "${AWS_REGION}": "ecr-login"
+                          }
+                        }
+EOF
 
-                        echo "=== Building and pushing image to ECR ==="
-                        docker build -t $ECR_REPO:$IMAGE_TAG -t $ECR_REPO:latest .
-                        docker push $ECR_REPO:$IMAGE_TAG
-                        docker push $ECR_REPO:latest
+                        /kaniko/executor \
+                          --context `pwd` \
+                          --dockerfile `pwd`/Dockerfile \
+                          --destination $ECR_REPO:$IMAGE_TAG \
+                          --destination $ECR_REPO:latest \
+                          --verbosity info
                     '''
                 }
             }
