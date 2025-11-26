@@ -8,7 +8,7 @@ spec:
   serviceAccountName: jenkins
   containers:
   - name: kaniko
-    image: gcr.io/kaniko-project/executor:latest
+    image: gcr.io/kaniko-project/executor:debug   # ✅ use debug version for shell
     command:
     - /busybox/sh
     args:
@@ -21,6 +21,7 @@ spec:
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
+
   - name: aws
     image: amazon/aws-cli:2.15.13
     command:
@@ -29,6 +30,7 @@ spec:
     envFrom:
     - secretRef:
         name: aws-credentials
+
   volumes:
   - name: workspace-volume
     emptyDir: {}
