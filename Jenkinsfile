@@ -8,7 +8,8 @@ spec:
   serviceAccountName: jenkins
   containers:
   - name: docker
-    image: amazon/aws-cli:2.15.13
+    # ✅ Docker + AWS CLI preinstalled
+    image: docker:24.0.7-cli
     command:
     - cat
     tty: true
@@ -17,6 +18,11 @@ spec:
       mountPath: /var/run/docker.sock
     - name: workspace-volume
       mountPath: /home/jenkins/agent
+  - name: aws
+    image: amazon/aws-cli:2.15.13
+    command:
+    - cat
+    tty: true
   volumes:
   - name: docker-sock
     hostPath:
@@ -42,22 +48,9 @@ spec:
             }
         }
 
-        stage('Install Docker CLI') {
-            steps {
-                container('docker') {
-                    sh '''
-                        echo "=== Installing Docker CLI ==="
-                        apt-get update -y
-                        apt-get install -y docker.io
-                        docker --version
-                    '''
-                }
-            }
-        }
-
         stage('Login to AWS ECR') {
             steps {
-                container('docker') {
+                container('aws') {
                     sh '''
                         echo "=== Logging into AWS ECR ==="
                         aws ecr describe-repositories --repository-names stock-app --region $AWS_REGION || \
