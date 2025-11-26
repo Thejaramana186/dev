@@ -46,11 +46,8 @@ spec:
             steps {
                 container('docker') {
                     sh '''
-                        echo "=== Installing AWS CLI ==="
-                        apk add --no-cache curl unzip
-                        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-                        unzip awscliv2.zip
-                        ./aws/install
+                        echo "=== Installing AWS CLI on Alpine ==="
+                        apk add --no-cache aws-cli
                         aws --version
                     '''
                 }
