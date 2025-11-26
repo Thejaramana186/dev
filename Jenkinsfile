@@ -8,7 +8,6 @@ spec:
   serviceAccountName: jenkins
   containers:
   - name: docker
-    # ✅ Docker + AWS CLI preinstalled
     image: docker:24.0.7-cli
     command:
     - cat
@@ -18,11 +17,6 @@ spec:
       mountPath: /var/run/docker.sock
     - name: workspace-volume
       mountPath: /home/jenkins/agent
-  - name: aws
-    image: amazon/aws-cli:2.15.13
-    command:
-    - cat
-    tty: true
   volumes:
   - name: docker-sock
     hostPath:
@@ -48,24 +42,31 @@ spec:
             }
         }
 
-        stage('Login to AWS ECR') {
+        stage('Install AWS CLI') {
             steps {
-                container('aws') {
+                container('docker') {
+                    sh '''
+                        echo "=== Installing AWS CLI ==="
+                        apk add --no-cache curl unzip
+                        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                        unzip awscliv2.zip
+                        ./aws/install
+                        aws --version
+                    '''
+                }
+            }
+        }
+
+        stage('Login to AWS ECR & Push Image') {
+            steps {
+                container('docker') {
                     sh '''
                         echo "=== Logging into AWS ECR ==="
                         aws ecr describe-repositories --repository-names stock-app --region $AWS_REGION || \
                         aws ecr create-repository --repository-name stock-app --region $AWS_REGION
 
                         aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com
-                    '''
-                }
-            }
-        }
 
-        stage('Build & Push Docker Image') {
-            steps {
-                container('docker') {
-                    sh '''
                         echo "=== Building and pushing image to ECR ==="
                         docker build -t $ECR_REPO:$IMAGE_TAG -t $ECR_REPO:latest .
                         docker push $ECR_REPO:$IMAGE_TAG
