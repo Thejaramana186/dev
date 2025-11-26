@@ -10,11 +10,14 @@ spec:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:latest
     command:
+    - /busybox/sh
+    args:
+    - -c
     - cat
     tty: true
     envFrom:
     - secretRef:
-        name: aws-credentials        # ✅ use envFrom instead of mountPath (simpler & correct)
+        name: aws-credentials
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
@@ -25,7 +28,7 @@ spec:
     tty: true
     envFrom:
     - secretRef:
-        name: aws-credentials        # ✅ AWS CLI container also needs credentials
+        name: aws-credentials
   volumes:
   - name: workspace-volume
     emptyDir: {}
