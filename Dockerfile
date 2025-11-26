@@ -24,7 +24,7 @@ COPY --from=builder /usr/local /usr/local
 COPY app/ ./app
 
 # Expose the app port
-EXPOSE 8080
+EXPOSE 8000
 
 # Start Gunicorn server with Uvicorn workers
 CMD ["gunicorn", "-w", "3", "-k", "uvicorn.workers.UvicornWorker", "app.main:app"]
