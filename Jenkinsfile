@@ -9,7 +9,6 @@ spec:
   containers:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:debug
-    # Using debug image to have shell support
     command:
     - /busybox/sh
     args:
@@ -53,11 +52,11 @@ spec:
         IMAGE_TAG = "v${BUILD_NUMBER}"
 
         // ---- GitOps Repository Info ----
-        GITOPS_REPO = "github.com/theja-2709/Theja-gitops.git"
+        GITOPS_REPO = "github.com/Theja-2709/Theja-gitops.git"
         GITOPS_FILE_PATH = "stack/deployment.yaml"
         GITOPS_BRANCH = "main"
 
-        GIT_USERNAME = "theja-2709"
+        GIT_USERNAME = "Theja-2709"
         GIT_EMAIL = "theja@example.com"
     }
 
@@ -100,11 +99,11 @@ spec:
                         }
 EOF
 
+                        # Build and push only the versioned image (no 'latest')
                         /kaniko/executor \
                           --context `pwd` \
                           --dockerfile `pwd`/Dockerfile \
                           --destination $ECR_REPO:$IMAGE_TAG \
-                          --destination $ECR_REPO:latest \
                           --verbosity info
                     '''
                 }
