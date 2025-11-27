@@ -9,6 +9,7 @@ spec:
   containers:
   - name: kaniko
     image: gcr.io/kaniko-project/executor:debug
+    # Using debug image to have shell support
     command:
     - /busybox/sh
     args:
@@ -45,25 +46,26 @@ spec:
     }
 
     environment {
+        // ---- AWS Configuration ----
         AWS_REGION = "us-east-1"
         ECR_ACCOUNT = "979750876373"
         ECR_REPO = "${ECR_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com/stock-app"
         IMAGE_TAG = "v${BUILD_NUMBER}"
 
-        # GitOps Repo Info
-        GITOPS_REPO = "github.com/Theja-2709/Theja-gitops.git"
+        // ---- GitOps Repository Info ----
+        GITOPS_REPO = "github.com/theja-2709/Theja-gitops.git"
         GITOPS_FILE_PATH = "stack/deployment.yaml"
         GITOPS_BRANCH = "main"
 
-        GIT_USERNAME = "Theja-2709"
-        GIT_EMAIL = "theja@18.com"
+        GIT_USERNAME = "theja-2709"
+        GIT_EMAIL = "theja@example.com"
     }
 
     stages {
 
-        stage('Checkout App Code') {
+        stage('Checkout Code') {
             steps {
-                echo "=== Checking out application repository ==="
+                echo "=== Checking out application source ==="
                 checkout scm
             }
         }
@@ -124,9 +126,9 @@ EOF
                             echo "=== Commit and push the updated image tag ==="
                             git config user.name "$GIT_USERNAME"
                             git config user.email "$GIT_EMAIL"
+
                             git add $GITOPS_FILE_PATH
-                            git commit -m "Auto-update image tag to ${IMAGE_TAG}"
-                            git push origin $GITOPS_BRANCH
+                            git diff --cached --exit-code || (git commit -m "Auto-update image tag to ${IMAGE_TAG}" && git push origin $GITOPS_BRANCH)
 
                             echo "✅ GitOps repository updated successfully!"
                         '''
