@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ company.name }} - Stock Data </title>
+    <title>{{ company.name }} - Stock Data (Delta Mode)</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -23,7 +23,7 @@
         <div id="message"></div>
 
         <div class="content">
-            <h2 style="margin-bottom: 20px; color: #1e3c72;">Recent Historical Data </h2>
+            <h2 style="margin-bottom: 20px; color: #1e3c72;">Recent Historical Data (Last 100 Records)</h2>
 
             {% if data %}
             <div class="table-wrapper">
