@@ -12,23 +12,31 @@ logger = logging.getLogger(__name__)
 # CLEAN ROW EXTRACTOR
 # ---------------------------------------------------------
 def _clean_row(idx, row):
-    """Convert a Yahoo Finance row into safe dict"""
+    """Convert a Yahoo Finance row into a safe Python dict."""
 
     try:
+        open_val = float(row["Open"]) if row["Open"] is not None else 0
+        high_val = float(row["High"]) if row["High"] is not None else 0
+        low_val = float(row["Low"]) if row["Low"] is not None else 0
+        close_val = float(row["Close"]) if row["Close"] is not None else 0
+        volume_val = float(row.get("Volume", 0) or 0)
+
         return {
             "date": idx.to_pydatetime().date(),
-            "open": float(row["Open"].item()),
-            "high": float(row["High"].item()),
-            "low": float(row["Low"].item()),
-            "close": float(row["Close"].item()),
-            "volume": float(row["Volume"].item() if row["Volume"].item() is not None else 0),
+            "open": open_val,
+            "high": high_val,
+            "low": low_val,
+            "close": close_val,
+            "volume": volume_val,
         }
-    except Exception:
+
+    except Exception as e:
+        logger.error(f"❌ Row cleanup error: {e}")
         return None
 
 
 # ---------------------------------------------------------
-# HISTORICAL DATA
+# FETCH HISTORICAL DATA
 # ---------------------------------------------------------
 def fetch_historical_data(
     yahoo_ticker: str,
@@ -44,12 +52,13 @@ def fetch_historical_data(
             yahoo_ticker,
             start=start_date,
             end=end_date,
-            auto_adjust=False,   # Explicitly added
-            progress=False
+            auto_adjust=False,
+            progress=False,
+            threads=False  # prevents rare yfinance thread crashes
         )
 
         if df.empty:
-            logger.error(f"❌ EMPTY Yahoo data for {yahoo_ticker}")
+            logger.warning(f"⚠ EMPTY Yahoo Finance data for {yahoo_ticker}")
             return []
 
         data = []
@@ -67,7 +76,7 @@ def fetch_historical_data(
 
 
 # ---------------------------------------------------------
-# LATEST N DAYS
+# FETCH LATEST N DAYS
 # ---------------------------------------------------------
 def fetch_latest_data(yahoo_ticker: str, days: int = 7) -> List[Dict]:
 
@@ -75,12 +84,13 @@ def fetch_latest_data(yahoo_ticker: str, days: int = 7) -> List[Dict]:
         df = yf.download(
             yahoo_ticker,
             period=f"{days}d",
-            auto_adjust=False,   # Explicitly added
-            progress=False
+            auto_adjust=False,
+            progress=False,
+            threads=False
         )
 
         if df.empty:
-            logger.error(f"❌ EMPTY latest Yahoo data for {yahoo_ticker}")
+            logger.warning(f"⚠ EMPTY latest Yahoo data for {yahoo_ticker}")
             return []
 
         data = []
@@ -100,6 +110,9 @@ def fetch_latest_data(yahoo_ticker: str, days: int = 7) -> List[Dict]:
 # DELTA FETCH (ONLY NEW ROWS)
 # ---------------------------------------------------------
 def fetch_delta_data(yahoo_ticker: str, db_session):
+    """
+    Fetch only new rows since the last saved date in DB.
+    """
 
     last_date = crud.get_last_date_from_db(yahoo_ticker, db_session)
 
@@ -110,20 +123,21 @@ def fetch_delta_data(yahoo_ticker: str, db_session):
 
     end_date = datetime.now().strftime("%Y-%m-%d")
 
+    # No need to fetch if DB is already up-to-date
     if datetime.strptime(start_date, "%Y-%m-%d").date() > datetime.strptime(end_date, "%Y-%m-%d").date():
         logger.info(f"⏩ No new data for {yahoo_ticker}")
         return []
 
-    logger.info(f"🔄 Delta fetch → {yahoo_ticker}: {start_date} → {end_date}")
+    logger.info(f"🔍 Delta fetch: {yahoo_ticker} | {start_date} → {end_date}")
 
     new_rows = fetch_historical_data(yahoo_ticker, start_date, end_date)
 
     if not new_rows:
-        logger.info(f"⚠ No new rows for {yahoo_ticker}")
+        logger.info(f"⚠ No new rows found for {yahoo_ticker}")
         return []
 
+    # Save into database
     crud.save_stock_data(yahoo_ticker, new_rows, db_session)
 
-    logger.info(f"✅ Added {len(new_rows)} new rows for {yahoo_ticker}")
-
+    logger.info(f"✅ Saved {len(new_rows)} new rows for {yahoo_ticker}")
     return new_rows
