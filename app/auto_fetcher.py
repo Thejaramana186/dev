@@ -12,4 +12,4 @@ while True:
         fetch_delta_data(t, db.session)
 
     print("Waiting 6 hours...")
-    time.sleep(21600)  # 6 hours
+    time.sleep(21600) 
